@@ -1,3 +1,4 @@
+# Git hooks run before every commit: hygiene checks, secret scan, author email, ruff, mypy.
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v6.0.0
@@ -26,3 +27,21 @@ repos:
         language: script
         pass_filenames: false
         always_run: true
+      - id: ruff-check
+        name: ruff (lint)
+        entry: bash -c 'cd backend && uv run --frozen ruff check --fix .'
+        language: system
+        files: ^backend/.*\.py$
+        pass_filenames: false
+      - id: ruff-format
+        name: ruff (format)
+        entry: bash -c 'cd backend && uv run --frozen ruff format .'
+        language: system
+        files: ^backend/.*\.py$
+        pass_filenames: false
+      - id: mypy
+        name: mypy (types)
+        entry: bash -c 'cd backend && uv run --frozen mypy app tests'
+        language: system
+        files: ^backend/.*\.py$
+        pass_filenames: false
