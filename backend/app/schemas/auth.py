@@ -4,13 +4,11 @@ from typing import Annotated, Literal
 
 from pydantic import AfterValidator, BaseModel, BeforeValidator, EmailStr, Field, SecretStr
 
+from app.schemas.common import lowercase
+
 # NIST SP 800-63B: favour length over composition rules; cap length so hashing stays cheap.
 PASSWORD_MIN_LENGTH = 12
 PASSWORD_MAX_LENGTH = 128
-
-
-def _lower(value: object) -> object:
-    return value.strip().lower() if isinstance(value, str) else value
 
 
 def _password_length(value: SecretStr) -> SecretStr:
@@ -23,7 +21,7 @@ def _password_length(value: SecretStr) -> SecretStr:
 
 
 Email = Annotated[EmailStr, AfterValidator(str.lower)]
-Username = Annotated[str, BeforeValidator(_lower), Field(pattern=r"^[a-z0-9_]{3,30}$")]
+Username = Annotated[str, BeforeValidator(lowercase), Field(pattern=r"^[a-z0-9_]{3,30}$")]
 NewPassword = Annotated[SecretStr, AfterValidator(_password_length)]
 
 
