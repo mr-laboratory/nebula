@@ -1,0 +1,28 @@
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: detect-private-key
+      - id: check-added-large-files
+        args: ["--maxkb=500"]
+      - id: check-merge-conflict
+      - id: check-yaml
+      - id: check-json
+      - id: check-toml
+      - id: end-of-file-fixer
+      - id: trailing-whitespace
+      - id: no-commit-to-branch
+        args: ["--branch", "main"]
+  - repo: local
+    hooks:
+      - id: gitleaks
+        name: gitleaks (secret scan)
+        entry: gitleaks git --pre-commit --staged --redact --verbose
+        language: system
+        pass_filenames: false
+      - id: author-email
+        name: author email is GitHub noreply
+        entry: scripts/check-author-email.sh
+        language: script
+        pass_filenames: false
+        always_run: true

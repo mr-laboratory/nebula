@@ -1,0 +1,61 @@
+# ─── Secrets (NEVER commit) ───────────────────────────────
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+*.crt
+id_rsa*
+id_ed25519*
+secrets/
+*.secret
+
+# ─── Data / user content (may contain personal info) ──────
+*.sql
+*.dump
+*.sqlite
+*.sqlite3
+*.db
+backups/
+uploads/
+media/
+exports/
+*.csv
+!**/fixtures/**/*.csv
+
+# ─── Python ───────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+
+# ─── Node / frontend ──────────────────────────────────────
+node_modules/
+frontend/dist/
+.vite/
+*.tsbuildinfo
+npm-debug.log*
+
+# ─── Logs ─────────────────────────────────────────────────
+*.log
+logs/
+
+# ─── OS / editor ──────────────────────────────────────────
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
