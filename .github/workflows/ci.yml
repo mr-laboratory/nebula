@@ -1,4 +1,4 @@
-# CI: lint, type-check and test the backend, and scan history for secrets on every PR.
+# CI: lint, type-check and test the backend (against real Postgres + Redis), and scan history for secrets on every PR.
 name: CI
 
 on:
@@ -21,6 +21,31 @@ jobs:
     defaults:
       run:
         working-directory: backend
+    # Throwaway credentials for the disposable CI database; not secrets.
+    env:
+      POSTGRES_USER: nebula
+      POSTGRES_PASSWORD: ci-only-throwaway
+      POSTGRES_DB: nebula
+      POSTGRES_HOST: localhost
+      POSTGRES_PORT: "5432"
+      REDIS_URL: redis://localhost:6379/0
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: nebula
+          POSTGRES_PASSWORD: ci-only-throwaway
+          POSTGRES_DB: nebula_test # tests use <POSTGRES_DB>_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U nebula -d nebula_test"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s --health-timeout 5s --health-retries 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -33,7 +58,7 @@ jobs:
       - name: Lint
         run: uv run ruff check . && uv run ruff format --check .
       - name: Type check
-        run: uv run mypy app tests
+        run: uv run mypy app tests scripts migrations
       - name: Test
         run: uv run pytest
 
