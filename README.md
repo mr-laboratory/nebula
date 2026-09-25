@@ -18,6 +18,7 @@ FastAPI · SQLAlchemy 2 (async) · Alembic · PostgreSQL · Redis · React + Vit
 
 ## Documentation
 
+- [Architecture](docs/architecture.md)
 - [Architecture decisions](docs/adr/)
 
 ## Quickstart
