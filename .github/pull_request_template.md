@@ -6,9 +6,9 @@
 
 <!-- e.g. P3 — Authentication -->
 
-## 🎓 Bootcamp concepts applied
+## Key decisions & trade-offs
 
-<!-- Which Day 1–5 concepts does this PR put into practice? -->
+<!-- Notable design choices, alternatives considered, follow-ups. -->
 
 -
 
@@ -21,4 +21,3 @@
 - [ ] Tests added/updated and passing
 - [ ] No secrets, real emails or personal data committed
 - [ ] Docs / `.env.example` updated if needed
-- [ ] Learning log updated

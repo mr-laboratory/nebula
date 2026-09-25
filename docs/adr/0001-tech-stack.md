@@ -5,7 +5,7 @@
 
 ## Context
 
-Nebula is a bootcamp project that must be production-grade, use only free tools, run locally for the demo, and apply Day 1–5 concepts (API design, databases, auth, testing, observability).
+Nebula must be production-grade, built entirely on free and open-source tooling, and runnable locally with a single command. It needs a clean API design, a relational data model, secure authentication, automated tests and observability.
 
 ## Decision
 
@@ -23,7 +23,7 @@ Nebula is a bootcamp project that must be production-grade, use only free tools,
 
 ## Alternatives considered
 
-- **Django REST Framework** — heavier; less aligned with async FastAPI curriculum.
+- **Django REST Framework** — heavier and sync-first; FastAPI gives native async and typed OpenAPI docs.
 - **SQLite** — no partial indexes / concurrency realism for production.
 - **Streamlit** — great for data apps, not for multi-user auth + custom UI.
 - **Snowflake** — analytics warehouse, not an OLTP app database; paid.
