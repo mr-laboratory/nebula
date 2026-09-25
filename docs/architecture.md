@@ -198,7 +198,7 @@ flowchart LR
 
 | Area | Status |
 |---|---|
-| Skeleton · config · logging · middleware · errors · liveness | 🚧 In progress |
+| Skeleton · config · logging · middleware · errors · liveness | ✅ Done (v0.1.0) |
 | Database · migrations · readiness | Planned |
 | Authentication | Planned |
 | Posts & public browsing | Planned |
