@@ -41,7 +41,7 @@ repos:
         pass_filenames: false
       - id: mypy
         name: mypy (types)
-        entry: bash -c 'cd backend && uv run --frozen mypy app tests'
+        entry: bash -c 'cd backend && uv run --frozen mypy app tests scripts migrations'
         language: system
         files: ^backend/.*\.py$
         pass_filenames: false
