@@ -8,13 +8,14 @@ migrated once per run. `db_session` tests run in a rolled-back transaction; API 
 from collections.abc import AsyncIterator, Iterator
 from functools import cache
 from pathlib import Path
+from typing import Any
 
 import pytest
 from alembic import command
 from alembic.config import Config
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
-from sqlalchemy import text
+from sqlalchemy import event, text
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.pool import NullPool
 
@@ -95,6 +96,20 @@ async def app(migrated_db: None, settings: Settings) -> AsyncIterator[FastAPI]:
 
 
 @pytest.fixture
+def sql_statements(app: FastAPI) -> Iterator[list[str]]:
+    """Every SQL statement the app runs during the test, in order (for N+1 checks)."""
+    statements: list[str] = []
+
+    def record(conn: object, cursor: object, statement: str, *args: object) -> None:
+        statements.append(statement)
+
+    engine = app.state.db.engine.sync_engine
+    event.listen(engine, "before_cursor_execute", record)
+    yield statements
+    event.remove(engine, "before_cursor_execute", record)
+
+
+@pytest.fixture
 async def client(app: FastAPI) -> AsyncIterator[AsyncClient]:
     transport = ASGITransport(app=app, raise_app_exceptions=False)
     # https: the refresh cookie is Secure, so the client only sends it over HTTPS.
@@ -102,7 +117,7 @@ async def client(app: FastAPI) -> AsyncIterator[AsyncClient]:
         yield ac
 
 
-async def register(client: AsyncClient, name: str = "ada", **overrides: str) -> dict[str, object]:
+async def register(client: AsyncClient, name: str = "ada", **overrides: str) -> dict[str, Any]:
     payload = {
         "email": f"{name}@example.com",
         "username": name,
@@ -127,3 +142,34 @@ async def login(client: AsyncClient, name: str = "ada", password: str = TEST_PAS
 
 def bearer(token: str) -> dict[str, str]:
     return {"Authorization": f"Bearer {token}"}
+
+
+async def signed_in(client: AsyncClient, name: str = "ada") -> dict[str, str]:
+    """Register `name` and return their Authorization header."""
+    await register(client, name)
+    return bearer(await login(client, name))
+
+
+async def create_post(
+    client: AsyncClient, auth: dict[str, str], *, publish: bool = False, **fields: object
+) -> dict[str, Any]:
+    payload = {"title": "Hello world", "content": "Some *markdown* content.", **fields}
+    response = await client.post("/api/v1/posts", json=payload, headers=auth)
+    assert response.status_code == 201, response.text
+    post: dict[str, Any] = response.json()
+    if publish:
+        response = await client.post(f"/api/v1/posts/{post['id']}/publish", headers=auth)
+        assert response.status_code == 200, response.text
+        post = response.json()
+    return post
+
+
+async def grant_role(app: FastAPI, username: str, role: str) -> None:
+    async with app.state.db.engine.begin() as conn:
+        await conn.execute(
+            text(
+                "INSERT INTO user_roles (user_id, role_id) "
+                "SELECT u.id, r.id FROM users u, roles r WHERE u.username = :u AND r.name = :r"
+            ),
+            {"u": username, "r": role},
+        )
