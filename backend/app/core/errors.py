@@ -2,6 +2,7 @@
 
 from collections.abc import Mapping
 from http import HTTPStatus
+from types import MappingProxyType
 from typing import Any, cast
 
 from fastapi import FastAPI, Request
@@ -19,6 +20,7 @@ class AppError(Exception):
 
     status_code: int = HTTPStatus.BAD_REQUEST
     default_detail: str = "The request could not be processed."
+    headers: Mapping[str, str] | None = None
 
     def __init__(self, detail: str | None = None) -> None:
         self.detail = detail or self.default_detail
@@ -28,6 +30,7 @@ class AppError(Exception):
 class UnauthorizedError(AppError):
     status_code = HTTPStatus.UNAUTHORIZED
     default_detail = "Authentication is required."
+    headers = MappingProxyType({"WWW-Authenticate": "Bearer"})  # read-only, shared
 
 
 class ForbiddenError(AppError):
@@ -43,6 +46,15 @@ class NotFoundError(AppError):
 class ConflictError(AppError):
     status_code = HTTPStatus.CONFLICT
     default_detail = "The request conflicts with the current state of the resource."
+
+
+class RateLimitedError(AppError):
+    status_code = HTTPStatus.TOO_MANY_REQUESTS
+    default_detail = "Too many requests. Please try again later."
+
+    def __init__(self, retry_after: int) -> None:
+        super().__init__()
+        self.headers = {"Retry-After": str(retry_after)}
 
 
 def problem_response(
@@ -67,7 +79,7 @@ def problem_response(
 
 async def _app_error_handler(request: Request, exc: Exception) -> JSONResponse:
     err = cast(AppError, exc)
-    return problem_response(err.status_code, err.detail, request.url.path)
+    return problem_response(err.status_code, err.detail, request.url.path, headers=err.headers)
 
 
 async def _http_error_handler(request: Request, exc: Exception) -> JSONResponse:

@@ -86,12 +86,29 @@ sequenceDiagram
     API->>DB: verify · store hashed refresh token
     API-->>B: access token (15 min) + httpOnly refresh cookie
     B->>API: POST /auth/refresh (cookie)
-    API->>DB: revoke old · issue new (rotation)
-    API-->>B: new access token + new cookie
-    B->>API: POST /auth/logout
-    API->>DB: revoke
+    API->>DB: lock token row (FOR UPDATE)
+    alt token active
+        API->>DB: revoke old · issue new in same family
+        API-->>B: new access token + new cookie
+    else token already used (stolen copy)
+        API->>DB: revoke entire family
+        API-->>B: 401 · sign in again
+    end
+    B->>API: POST /auth/logout (cookie)
+    API->>DB: revoke family
     API-->>B: 204 · cookie cleared
 ```
+
+```mermaid
+flowchart LR
+    RQ["GET /users/me<br/>Bearer token"] --> V{"JWT valid?<br/>signature · alg · exp<br/>iss · aud · type"}
+    V -->|no| X["401 + WWW-Authenticate"]
+    V -->|yes| A{User exists<br/>and active?}
+    A -->|no| X
+    A -->|yes| OK[CurrentUser → route]
+```
+
+Endpoints, payloads, cookies and rate limits: [api.md](api.md).
 
 ### 4.3 Author manages own posts
 
@@ -200,7 +217,7 @@ flowchart LR
 |---|---|
 | Skeleton · config · logging · middleware · errors · liveness | ✅ Done (v0.1.0) |
 | Database · migrations · readiness | ✅ Done (v0.2.0) |
-| Authentication | Planned |
+| Authentication · rate limiting · profile | ✅ Done (v0.3.0) |
 | Posts & public browsing | Planned |
 | Likes & comments | Planned |
 | Frontend | Planned |

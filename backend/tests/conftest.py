@@ -1,7 +1,8 @@
 """Shared pytest fixtures: test settings, a migrated test database, app and HTTP client.
 
-Tests use the separate `<POSTGRES_DB>_test` database. The schema is migrated once per run,
-and every DB test runs inside a transaction that is rolled back, so tests never leak data.
+Tests use the separate `<POSTGRES_DB>_test` database and Redis database 15. The schema is
+migrated once per run. `db_session` tests run in a rolled-back transaction; API tests
+(`client`) commit for real, so user data is truncated and Redis flushed around each one.
 """
 
 from collections.abc import AsyncIterator, Iterator
@@ -13,6 +14,7 @@ from alembic import command
 from alembic.config import Config
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.pool import NullPool
 
@@ -20,6 +22,8 @@ from app.core.config import Settings
 from app.main import create_app
 
 TEST_SECRET = "test-secret-" + "x" * 40
+TEST_PASSWORD = "correct-horse-battery"
+TEST_REDIS_DB = 15
 BACKEND_DIR = Path(__file__).resolve().parents[1]
 
 
@@ -37,7 +41,7 @@ def build_test_settings() -> Settings:
         postgres_host=local.postgres_host,
         postgres_port=local.postgres_port,
         postgres_db=f"{local.postgres_db}_test",
-        redis_url=local.redis_url,
+        redis_url=f"{local.redis_url.rsplit('/', 1)[0]}/{TEST_REDIS_DB}",
     )
 
 
@@ -78,9 +82,13 @@ async def db_session(migrated_db: None, settings: Settings) -> AsyncIterator[Asy
 
 
 @pytest.fixture
-async def app(settings: Settings) -> AsyncIterator[FastAPI]:
+async def app(migrated_db: None, settings: Settings) -> AsyncIterator[FastAPI]:
     application = create_app(settings)
+    await application.state.redis.flushdb()  # fresh rate-limit counters
     yield application
+    async with application.state.db.engine.begin() as conn:
+        # Roles and permissions are reference data from migrations, so they stay.
+        await conn.execute(text("TRUNCATE users, tags RESTART IDENTITY CASCADE"))
     # httpx's ASGITransport does not run the lifespan, so close clients here.
     await application.state.db.dispose()
     await application.state.redis.aclose()
@@ -89,5 +97,33 @@ async def app(settings: Settings) -> AsyncIterator[FastAPI]:
 @pytest.fixture
 async def client(app: FastAPI) -> AsyncIterator[AsyncClient]:
     transport = ASGITransport(app=app, raise_app_exceptions=False)
-    async with AsyncClient(transport=transport, base_url="http://test") as ac:
+    # https: the refresh cookie is Secure, so the client only sends it over HTTPS.
+    async with AsyncClient(transport=transport, base_url="https://test") as ac:
         yield ac
+
+
+async def register(client: AsyncClient, name: str = "ada", **overrides: str) -> dict[str, object]:
+    payload = {
+        "email": f"{name}@example.com",
+        "username": name,
+        "password": TEST_PASSWORD,
+        "display_name": name.title(),
+        **overrides,
+    }
+    response = await client.post("/api/v1/auth/register", json=payload)
+    assert response.status_code == 201, response.text
+    body: dict[str, object] = response.json()
+    return body
+
+
+async def login(client: AsyncClient, name: str = "ada", password: str = TEST_PASSWORD) -> str:
+    response = await client.post(
+        "/api/v1/auth/login", json={"email": f"{name}@example.com", "password": password}
+    )
+    assert response.status_code == 200, response.text
+    token: str = response.json()["access_token"]
+    return token
+
+
+def bearer(token: str) -> dict[str, str]:
+    return {"Authorization": f"Bearer {token}"}
