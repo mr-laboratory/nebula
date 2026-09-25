@@ -14,6 +14,7 @@ from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
+from app.core.slugs import slugify
 from app.db.session import Database
 from app.models import Comment, Like, Post, PostStatus, Role, Tag, User
 
@@ -21,10 +22,6 @@ SEED = 42
 TAGS = ["python", "fastapi", "react", "postgres", "design", "devops", "security", "career"]
 # "!" can never equal a real password hash, so seeded accounts cannot log in.
 UNUSABLE_PASSWORD = "!"  # noqa: S105
-
-
-def slugify(value: str) -> str:
-    return re.sub(r"[^a-z0-9]+", "-", value.lower()).strip("-")
 
 
 def make_users(fake: Faker, count: int, role: Role) -> list[User]:
@@ -52,7 +49,7 @@ def make_post(fake: Faker, author: User, tags: list[Tag], index: int) -> Post:
     return Post(
         author=author,
         title=title,
-        slug=f"{slugify(title)[:200]}-{index}",
+        slug=f"{slugify(title)}-{index}",
         excerpt=fake.sentence(nb_words=20)[:300],
         content=f"## {fake.sentence(nb_words=4)}\n\n{paragraphs}",
         status=PostStatus.PUBLISHED if published else PostStatus.DRAFT,

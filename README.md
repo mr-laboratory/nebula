@@ -56,7 +56,8 @@ backend/
 │   ├── db/                # declarative base, engine and sessions
 │   ├── models/            # ORM models (one file per table group)
 │   ├── schemas/           # request/response models (whitelisted fields)
-│   ├── services/          # business logic
+│   ├── services/          # business logic and permission checks
+│   ├── repositories/      # database queries (filters, pagination, eager loading)
 │   └── api/               # dependencies and v1 HTTP endpoints
 ├── migrations/            # Alembic schema migrations
 ├── scripts/               # developer scripts (seed data)

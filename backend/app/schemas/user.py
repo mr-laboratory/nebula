@@ -22,7 +22,26 @@ class UserMe(BaseModel):
     permissions: list[str]
 
 
+class AuthorPublic(BaseModel):
+    """How an author appears next to their content. No email, no internal id."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    username: str
+    display_name: str
+
+
+class UserPublic(AuthorPublic):
+    """A public profile page."""
+
+    bio: str | None
+    created_at: datetime
+    post_count: int = Field(description="Published posts")
+
+
 class UserUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")  # email, username and roles are not editable here
+
     display_name: Annotated[str, Field(min_length=1, max_length=60)] | None = None
     bio: Annotated[str, Field(max_length=280)] | None = None
 
