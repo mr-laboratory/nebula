@@ -11,6 +11,8 @@ Base URL: `http://localhost:8000/api/v1` · Interactive docs (OpenAPI): `/docs` 
 | Errors | [RFC 9457 Problem Details](#errors) with `Content-Type: application/problem+json`. |
 | Tracing | Every response carries `X-Request-ID`; quote it when reporting a problem. |
 | Privacy | Responses use whitelisted schemas: password hashes, tokens and internal flags are never returned. |
+| Strict input | Unknown body fields and query parameters are rejected with `422`, so server-controlled fields (`author_id`, `status`, `slug`) can't be set by clients. |
+| Pagination | `?limit=` (1–100, default 20) and `?offset=` (0–10 000). Lists return `{items, total, limit, offset}`. |
 
 ## Authentication model
 
@@ -47,6 +49,16 @@ sequenceDiagram
 | `POST` | `/auth/logout` | cookie | `204` | Revoke the session |
 | `GET` | `/users/me` | Bearer | `200` | Own profile, roles and permissions |
 | `PATCH` | `/users/me` | Bearer | `200` | Update display name / bio |
+| `GET` | `/users/me/posts` | Bearer | `200` | Own posts, drafts included |
+| `GET` | `/users/{username}` | — | `200` | Public author profile |
+| `GET` | `/posts` | — | `200` | Public feed: filter, search, paginate |
+| `GET` | `/posts/{slug}` | optional | `200` | Read a post |
+| `POST` | `/posts` | Bearer | `201` | Create a draft |
+| `PATCH` | `/posts/{id}` | Bearer (owner) | `200` | Edit a post |
+| `POST` | `/posts/{id}/publish` | Bearer (owner) | `200` | Make public (idempotent) |
+| `POST` | `/posts/{id}/unpublish` | Bearer (owner) | `200` | Back to draft (idempotent) |
+| `DELETE` | `/posts/{id}` | Bearer (owner or moderator) | `204` | Soft-delete |
+| `GET` | `/tags` | — | `200` | Tags in use, most popular first |
 | `GET` | `/health/live` | — | `200` | Process is running |
 | `GET` | `/health/ready` | — | `200` / `503` | Database and Redis are reachable |
 
@@ -100,7 +112,7 @@ No body and no access token needed, so a user whose access token has expired can
 }
 ```
 
-`email` appears only in the owner's own profile. Public author views (Phase 4) expose `username` and `display_name` only.
+`email` appears only in the owner's own profile. Public views never include it.
 
 ### `PATCH /users/me`
 
@@ -108,7 +120,106 @@ No body and no access token needed, so a user whose access token has expired can
 { "display_name": "Ada L.", "bio": "Writes about engines." }
 ```
 
-Send at least one field. `display_name` cannot be null or empty. Email, username and roles are not editable here; unknown fields are ignored.
+Send at least one field. `display_name` cannot be null or empty. Email, username and roles are not editable here; unknown fields are rejected (`422`).
+
+### `GET /users/{username}`
+
+```json
+{ "username": "ada", "display_name": "Ada", "bio": null, "created_at": "2026-09-25T18:23:46Z", "post_count": 3 }
+```
+
+`post_count` counts published posts only. `404` for unknown or deactivated accounts.
+
+### `GET /users/me/posts`
+
+Same page shape as the feed, including drafts, newest edit first. Optional `?status=draft|published`.
+
+## Posts
+
+### Visibility and permissions
+
+```mermaid
+flowchart LR
+    R["Request for a post"] --> D{Deleted?}
+    D -->|yes| N404[404]
+    D -->|no| P{Published?}
+    P -->|yes| READ["✓ anyone can read"]
+    P -->|no| O{Owner?}
+    O -->|yes| READ2["✓ owner can read"]
+    O -->|no| N404
+```
+
+| Action | Owner | Moderator | Other signed-in user |
+|---|---|---|---|
+| Read a draft | ✓ | `404` | `404` |
+| Edit / publish / unpublish | ✓ | `403` | `403` (published) · `404` (draft) |
+| Delete | ✓ | ✓ | `403` (published) · `404` (draft) |
+
+A draft answers `404` rather than `403` to anyone but its author, so its existence is never revealed.
+
+### `GET /posts`
+
+| Parameter | Rules |
+|---|---|
+| `tag` | Exact tag name (case-insensitive) |
+| `author` | Username |
+| `q` | 1–100 chars, searched in title and excerpt; `%` and `_` match literally |
+| `sort` | `newest` (default) or `oldest`, by publication date |
+| `limit`, `offset` | See [pagination](#conventions) |
+
+```json
+{
+  "items": [{
+    "id": "4f0c…", "slug": "hello-world", "title": "Hello world",
+    "excerpt": "Some *markdown* content.", "status": "published",
+    "author": { "username": "ada", "display_name": "Ada" },
+    "tags": ["python"],
+    "published_at": "2026-09-25T18:30:00Z", "created_at": "…", "updated_at": "…"
+  }],
+  "total": 1, "limit": 20, "offset": 0
+}
+```
+
+List items never include `content`; `excerpt` falls back to the first 280 characters of it. The page is loaded in 3 queries whatever its size (count, posts with authors, tags).
+
+### `GET /posts/{slug}`
+
+The list item plus `content` (Markdown). Drafts are visible to their author only (send the Bearer token); everyone else gets `404`.
+
+### `POST /posts`
+
+```json
+{ "title": "Hello world", "content": "Some *markdown* content.", "excerpt": "Optional summary", "tags": ["Python", "fastapi"] }
+```
+
+| Field | Rules |
+|---|---|
+| `title` | 1–200 characters |
+| `content` | 1–100 000 characters (Markdown) |
+| `excerpt` | Optional, ≤ 300 characters |
+| `tags` | ≤ 5, each `a-z 0-9 -` and ≤ 40 characters; lowercased and de-duplicated |
+
+Returns `201` with the full post and `Location: /api/v1/posts/{slug}`. New posts are drafts. The slug comes from the title (`hello-world`); if it is taken, a random suffix is added (`hello-world-3fa9c1`).
+
+### `PATCH /posts/{id}`
+
+Send only the fields to change (at least one). `excerpt: null` clears it. Retitling a post that has **never been published** also updates its slug; after the first publication the slug is permanent, so shared links keep working.
+
+### `POST /posts/{id}/publish` · `/unpublish`
+
+No body; returns the post. Repeating the call is harmless. `published_at` records the **first** publication and is kept if the post is unpublished.
+
+### `DELETE /posts/{id}`
+
+Soft delete: the post disappears everywhere, including for its author, and its slug is never reused. Moderators may delete any post but cannot edit it.
+
+### `GET /tags`
+
+```json
+[{ "name": "python", "post_count": 12 }, { "name": "react", "post_count": 7 }]
+```
+
+Counts published posts only. `?limit=` 1–100, default 50.
 
 ## Errors
 

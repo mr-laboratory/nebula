@@ -60,9 +60,11 @@ sequenceDiagram
     participant V as Visitor
     participant API
     participant DB as PostgreSQL
-    V->>API: GET /posts?limit=20&offset=0
-    API->>DB: published · not deleted · newest first
-    DB-->>API: posts + author + counts (one query)
+    V->>API: GET /posts?tag=python&limit=20
+    API->>DB: 1 · COUNT(*) matching posts
+    API->>DB: 2 · posts JOIN authors (preview only, no content)
+    API->>DB: 3 · tags WHERE post_id IN (page)
+    Note over API,DB: always 3 queries, whatever the page size (no N+1)
     API-->>V: 200 {items, total, limit, offset}
     V->>API: GET /posts/{slug}
     alt published
@@ -129,11 +131,13 @@ stateDiagram-v2
 
 ```mermaid
 flowchart LR
-    Q["PATCH / DELETE /posts/{id}"] --> A{Owner?}
+    Q["PATCH / publish / DELETE<br/>/posts/{id}"] --> A{Owner?}
     A -->|yes| OK[✓ allowed]
-    A -->|no| M{"Moderator?<br/>(delete only)"}
+    A -->|no| M{"DELETE and has<br/>post:delete:any?"}
     M -->|yes| OK
-    M -->|no| F[403 Forbidden]
+    M -->|no| DR{Draft?}
+    DR -->|yes| NF["404 Not Found<br/>(hidden)"]
+    DR -->|no| F[403 Forbidden]
 ```
 
 ### 4.4 Likes
@@ -218,7 +222,7 @@ flowchart LR
 | Skeleton · config · logging · middleware · errors · liveness | ✅ Done (v0.1.0) |
 | Database · migrations · readiness | ✅ Done (v0.2.0) |
 | Authentication · rate limiting · profile | ✅ Done (v0.3.0) |
-| Posts & public browsing | Planned |
+| Posts & public browsing | ✅ Done (v0.4.0) |
 | Likes & comments | Planned |
 | Frontend | Planned |
 | Indexes & query optimization | Planned |
