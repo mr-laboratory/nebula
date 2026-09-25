@@ -19,15 +19,19 @@ FastAPI · SQLAlchemy 2 (async) · Alembic · PostgreSQL · Redis · React + Vit
 ## Documentation
 
 - [Architecture](docs/architecture.md)
+- [Database](docs/database.md)
 - [Architecture decisions](docs/adr/)
 
 ## Quickstart
 
-**Prerequisites:** [uv](https://docs.astral.sh/uv/), `make`, and [pre-commit](https://pre-commit.com/).
+**Prerequisites:** [uv](https://docs.astral.sh/uv/), `make`, [pre-commit](https://pre-commit.com/), and Docker (Docker Desktop, or [Colima](https://github.com/abiosoft/colima) on macOS).
 
 ```bash
 git clone https://github.com/mr-laboratory/nebula.git && cd nebula
 make setup    # install dependencies + git hooks, create .env with random secrets
+make db-up    # start Postgres + Redis
+make migrate  # create the schema
+make seed     # optional: demo users, posts, likes and comments
 make dev      # API on http://localhost:8000 — interactive docs at /docs
 ```
 
@@ -37,6 +41,9 @@ make dev      # API on http://localhost:8000 — interactive docs at /docs
 | `make lint` / `make fmt` | Check / fix style |
 | `make typecheck` | Static type checking (mypy, strict) |
 | `make check` | Everything CI runs |
+| `make db-up` / `make db-down` | Start / stop Postgres and Redis |
+| `make migration m="…"` | Generate a migration from model changes |
+| `make psql` | SQL shell on the local database |
 
 ## Project structure
 
@@ -45,9 +52,16 @@ backend/
 ├── app/
 │   ├── main.py            # application factory
 │   ├── core/              # config, logging, middleware, errors
-│   └── api/v1/routes/     # HTTP endpoints
+│   ├── db/                # declarative base, engine and sessions
+│   ├── models/            # ORM models (one file per table group)
+│   ├── services/          # business logic
+│   └── api/               # dependencies and v1 HTTP endpoints
+├── migrations/            # Alembic schema migrations
+├── scripts/               # developer scripts (seed data)
 └── tests/
-docs/                      # architecture, ADRs
+docker/                    # container init scripts
+docs/                      # architecture, database, ADRs
+docker-compose.yml         # local Postgres + Redis
 ```
 
 ## Security

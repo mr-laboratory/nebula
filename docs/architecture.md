@@ -158,7 +158,7 @@ erDiagram
     USERS ||--o{ REFRESH_TOKENS : owns
 ```
 
-Full schema, indexes and query plans: `database.md`.
+Full schema, constraints and design decisions: [database.md](database.md).
 
 ## 6. Security layers
 
@@ -199,7 +199,7 @@ flowchart LR
 | Area | Status |
 |---|---|
 | Skeleton · config · logging · middleware · errors · liveness | ✅ Done (v0.1.0) |
-| Database · migrations · readiness | Planned |
+| Database · migrations · readiness | ✅ Done (v0.2.0) |
 | Authentication | Planned |
 | Posts & public browsing | Planned |
 | Likes & comments | Planned |
