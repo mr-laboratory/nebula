@@ -19,6 +19,7 @@ FastAPI · SQLAlchemy 2 (async) · Alembic · PostgreSQL · Redis · React + Vit
 ## Documentation
 
 - [Architecture](docs/architecture.md)
+- [API reference](docs/api.md)
 - [Database](docs/database.md)
 - [Architecture decisions](docs/adr/)
 
@@ -51,16 +52,17 @@ make dev      # API on http://localhost:8000 — interactive docs at /docs
 backend/
 ├── app/
 │   ├── main.py            # application factory
-│   ├── core/              # config, logging, middleware, errors
+│   ├── core/              # config, logging, middleware, errors, security, rate limits
 │   ├── db/                # declarative base, engine and sessions
 │   ├── models/            # ORM models (one file per table group)
+│   ├── schemas/           # request/response models (whitelisted fields)
 │   ├── services/          # business logic
 │   └── api/               # dependencies and v1 HTTP endpoints
 ├── migrations/            # Alembic schema migrations
 ├── scripts/               # developer scripts (seed data)
 └── tests/
 docker/                    # container init scripts
-docs/                      # architecture, database, ADRs
+docs/                      # architecture, API, database, ADRs
 docker-compose.yml         # local Postgres + Redis
 ```
 
