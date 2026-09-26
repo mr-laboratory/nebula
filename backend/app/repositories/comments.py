@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import contains_eager
 
 from app.models import Comment
+from app.repositories.posts import AUTHOR_COLUMNS
 
 
 async def list_for_post(
@@ -19,7 +20,7 @@ async def list_for_post(
     stmt = (
         select(Comment)
         .join(Comment.author)
-        .options(contains_eager(Comment.author))
+        .options(contains_eager(Comment.author).load_only(*AUTHOR_COLUMNS, raiseload=True))
         .where(Comment.post_id == post_id)
         .order_by(Comment.created_at.asc(), Comment.id.asc())
         .limit(limit)
@@ -33,7 +34,7 @@ async def get(session: AsyncSession, comment_id: uuid.UUID) -> Comment | None:
     stmt = (
         select(Comment)
         .join(Comment.author)
-        .options(contains_eager(Comment.author))
+        .options(contains_eager(Comment.author).load_only(*AUTHOR_COLUMNS, raiseload=True))
         .where(Comment.id == comment_id, Comment.deleted_at.is_(None))
         .execution_options(populate_existing=True)
     )

@@ -7,7 +7,7 @@ import uuid
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import CheckConstraint, DateTime, Enum, ForeignKey, String, Text
+from sqlalchemy import CheckConstraint, DateTime, Enum, ForeignKey, Index, String, Text, text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base, SoftDeleteMixin, TimestampMixin, UUIDPrimaryKeyMixin
@@ -23,11 +23,42 @@ class PostStatus(enum.StrEnum):
     PUBLISHED = "published"
 
 
+# Partial-index predicates. Queries must repeat them literally (not as bound parameters)
+# for the planner to prove an index applies; see IS_PUBLIC in repositories/posts.py.
+PUBLIC_PREDICATE = text("status = 'published' AND deleted_at IS NULL")
+NOT_DELETED_PREDICATE = text("deleted_at IS NULL")
+
+
 class Post(UUIDPrimaryKeyMixin, TimestampMixin, SoftDeleteMixin, Base):
     __tablename__ = "posts"
     __table_args__ = (
         CheckConstraint(
             "status <> 'published' OR published_at IS NOT NULL", name="published_has_date"
+        ),
+        # Public feed in either sort order (a B-tree reads backwards just as well).
+        Index("ix_posts_feed", "published_at", "id", postgresql_where=PUBLIC_PREDICATE),
+        # An author's dashboard, newest edit first; also serves the author_id foreign key.
+        Index(
+            "ix_posts_author_updated",
+            "author_id",
+            "updated_at",
+            "id",
+            postgresql_where=NOT_DELETED_PREDICATE,
+        ),
+        # Trigram indexes let ILIKE '%term%' search use an index instead of reading every row.
+        Index(
+            "ix_posts_title_trgm",
+            "title",
+            postgresql_using="gin",
+            postgresql_ops={"title": "gin_trgm_ops"},
+            postgresql_where=PUBLIC_PREDICATE,
+        ),
+        Index(
+            "ix_posts_excerpt_trgm",
+            "excerpt",
+            postgresql_using="gin",
+            postgresql_ops={"excerpt": "gin_trgm_ops"},
+            postgresql_where=PUBLIC_PREDICATE,
         ),
     )
 

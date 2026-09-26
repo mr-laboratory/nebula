@@ -4,7 +4,7 @@ import uuid
 from collections.abc import Sequence
 from typing import Any, NamedTuple
 
-from sqlalchemy import ColumnElement, Select, exists, false, func, or_, select
+from sqlalchemy import ColumnElement, Select, exists, false, func, literal, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import contains_eager, defer, selectinload
 
@@ -13,9 +13,11 @@ from app.schemas.post import MyPostFilters, PostFilters
 
 PREVIEW_LENGTH = 280
 
-# Everyone may see a post that is published and not deleted.
+# Everyone may see a post that is published and not deleted. The status is rendered inline
+# (not as a bound parameter) so the planner can match the partial indexes on posts even when
+# it reuses a generic plan for a prepared statement.
 IS_PUBLIC: tuple[ColumnElement[bool], ...] = (
-    Post.status == PostStatus.PUBLISHED,
+    Post.status == literal(PostStatus.PUBLISHED, Post.status.type, literal_execute=True),
     Post.deleted_at.is_(None),
 )
 # The author's excerpt, or else the start of the content, computed in SQL so the
@@ -49,6 +51,11 @@ def _liked_by(viewer_id: uuid.UUID | None) -> ColumnElement[bool]:
     return exists().where(Like.post_id == Post.id, Like.user_id == viewer_id)
 
 
+# List pages only show an author's name, so only those columns are read (email and
+# password hash never leave the database for them); touching anything else raises.
+AUTHOR_COLUMNS = (User.id, User.username, User.display_name)
+
+
 def _with_relations(stmt: Select[Post]) -> Select[Post]:
     # Author: joined into the same query. Tags: one extra IN query for the whole page.
     return stmt.join(Post.author).options(contains_eager(Post.author), selectinload(Post.tags))
@@ -67,14 +74,12 @@ async def _page(
     offset: int,
     viewer_id: uuid.UUID | None,
 ) -> tuple[list[PostRow], int]:
-    total = await session.scalar(
-        select(func.count()).select_from(Post).join(Post.author).where(*conditions)
-    )
+    total = await session.scalar(select(func.count()).select_from(Post).where(*conditions))
     stmt = (
         select(Post, PREVIEW, LIKE_COUNT, COMMENT_COUNT, _liked_by(viewer_id))
         .join(Post.author)
         .options(
-            contains_eager(Post.author),
+            contains_eager(Post.author).load_only(*AUTHOR_COLUMNS, raiseload=True),
             selectinload(Post.tags),
             defer(Post.content, raiseload=True),  # accidental access fails loudly
         )
@@ -97,7 +102,7 @@ async def list_public(
     if filters.tag:
         conditions.append(Post.tags.any(Tag.name == filters.tag))
     if filters.author:
-        conditions.append(User.username == filters.author)
+        conditions.append(Post.author.has(User.username == filters.author))
     if filters.q:
         pattern = f"%{_escape_like(filters.q)}%"
         conditions.append(
