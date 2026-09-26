@@ -13,6 +13,8 @@ Base URL: `http://localhost:8000/api/v1` · Interactive docs (OpenAPI): `/docs` 
 | Privacy | Responses use whitelisted schemas: password hashes, tokens and internal flags are never returned. |
 | Strict input | Unknown body fields and query parameters are rejected with `422`, so server-controlled fields (`author_id`, `status`, `slug`) can't be set by clients. |
 | Pagination | `?limit=` (1–100, default 20) and `?offset=` (0–10 000). Lists return `{items, total, limit, offset}`. |
+| Caching | Anonymous public `GET`s (posts, comments, tags, profiles) return a weak `ETag` with `Cache-Control: no-cache`; send it back as `If-None-Match` to get an empty `304` when nothing changed. Requests with `Authorization` and every other response are `no-store`. |
+| Compression | Responses over 1 KB are gzipped when the client sends `Accept-Encoding: gzip`. `/auth/*` responses are never compressed (they carry tokens; see BREACH). |
 
 ## Authentication model
 

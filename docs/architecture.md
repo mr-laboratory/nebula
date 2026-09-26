@@ -36,7 +36,7 @@ Dependencies point **downward only**.
 
 ```mermaid
 flowchart LR
-    C([Client]) --> ID["① Request ID<br/>X-Request-ID"] --> LOG["② Access log<br/>JSON, redacted"] --> CORS["③ CORS<br/>frontend origin only"] --> SH["④ Security headers<br/>CSP, nosniff, frame-deny"] --> RT["Route → Service → Repository"] --> DB[(PostgreSQL)]
+    C([Client]) --> SH["① Security headers<br/>CSP, nosniff, frame-deny"] --> ID["② Request ID + access log<br/>X-Request-ID, JSON, redacted"] --> GZ["③ Gzip<br/>over 1 KB, not /auth"] --> CORS["④ CORS<br/>frontend origin only"] --> ET["⑤ ETag<br/>anonymous public GETs → 304"] --> RT["Route → Service → Repository"] --> DB[(PostgreSQL)]
     RT -->|success| OK["200/201/204<br/>response schema"]
     RT -->|domain error| PD["4xx Problem Details<br/>RFC 9457"]
     RT -->|unexpected| E5["500 generic message<br/>+ request_id only"]
@@ -64,8 +64,10 @@ sequenceDiagram
     API->>DB: 1 · COUNT(*) matching posts
     API->>DB: 2 · posts JOIN authors + like/comment counts (preview only)
     API->>DB: 3 · tags WHERE post_id IN (page)
-    Note over API,DB: always 3 queries, whatever the page size (no N+1)
-    API-->>V: 200 {items, total, limit, offset}
+    Note over API,DB: always 3 queries, whatever the page size (no N+1),<br/>each served by an index (see database.md)
+    API-->>V: 200 {items, total, limit, offset} + ETag
+    V->>API: GET /posts?tag=python (If-None-Match)
+    API-->>V: 304 Not Modified (empty body) if unchanged
     V->>API: GET /posts/{slug}
     alt published
         API-->>V: 200 post
@@ -292,6 +294,6 @@ flowchart LR
 | Posts & public browsing | ✅ Done (v0.4.0) |
 | Likes & comments | ✅ Done (v0.5.0) |
 | Frontend (feed, posts, auth, editor, dashboard, theming) | ✅ Done (v0.6.0) |
-| Indexes & query optimization | Planned |
+| Indexes · query optimization · HTTP caching and compression | ✅ Done (v0.7.0) |
 | Roles (user / moderator) | Planned |
 | Containers · CI · metrics | Planned |

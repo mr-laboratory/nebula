@@ -48,6 +48,7 @@ make web      # in a second terminal: app on http://localhost:5173
 | `make api-types` | Regenerate the OpenAPI schema and the frontend's API types |
 | `make db-up` / `make db-down` | Start / stop Postgres and Redis |
 | `make migration m="…"` | Generate a migration from model changes |
+| `make seed-large` / `make explain` | Load 10k demo posts / print query plans and timings |
 | `make psql` | SQL shell on the local database |
 
 ## Project structure
@@ -64,7 +65,7 @@ backend/
 │   ├── repositories/      # database queries (filters, pagination, eager loading)
 │   └── api/               # dependencies and v1 HTTP endpoints
 ├── migrations/            # Alembic schema migrations
-├── scripts/               # developer scripts (seed data)
+├── scripts/               # developer scripts (seed data, query plans)
 └── tests/
 frontend/
 ├── public/                # favicon, pre-paint theme script
