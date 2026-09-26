@@ -1,4 +1,4 @@
-# CI: lint, type-check and test the backend (against real Postgres + Redis), and scan history for secrets on every PR.
+# CI: lint, type-check and test the backend (against real Postgres + Redis) and the web app, and scan history for secrets.
 name: CI
 
 on:
@@ -61,6 +61,34 @@ jobs:
         run: uv run mypy app tests scripts migrations
       - name: Test
         run: uv run pytest
+      # The committed schema must match the code, or the frontend's generated types are stale.
+      - name: OpenAPI schema is up to date
+        run: uv run python -m scripts.export_openapi | diff -u ../docs/openapi.json - || (echo "Run 'make api-types' and commit the result." && exit 1)
+
+  frontend:
+    name: Frontend (lint · types · tests · build)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install dependencies
+        run: npm ci
+      - name: Generated API types match the schema
+        run: |
+          npm run api-types && npx prettier --write src/api/schema.d.ts
+          git diff --exit-code -- src/api/schema.d.ts || (echo "Run 'make api-types' and commit the result." && exit 1)
+      - name: Lint · format · types · tests · build
+        run: npm run check
 
   secrets:
     name: Secret scan
