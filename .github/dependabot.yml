@@ -1,4 +1,7 @@
 # Dependabot: weekly update PRs for Python and npm dependencies and GitHub Actions.
+#
+# Minor and patch updates are grouped into one PR per ecosystem. Major updates come as
+# separate PRs, so one breaking release can't hold back the safe ones.
 version: 2
 updates:
   - package-ecosystem: uv
@@ -6,16 +9,23 @@ updates:
     schedule:
       interval: weekly
     groups:
-      python-deps:
-        patterns: ["*"]
+      python-minor-patch:
+        update-types: [minor, patch]
 
   - package-ecosystem: npm
     directory: /frontend
     schedule:
       interval: weekly
     groups:
-      npm-deps:
-        patterns: ["*"]
+      npm-minor-patch:
+        update-types: [minor, patch]
+    ignore:
+      # Node's type definitions must match the Node version we run (24, see package.json engines).
+      - dependency-name: "@types/node"
+        update-types: [version-update:semver-major]
+      # Held back until the tools that depend on it support it (openapi-typescript needs ^5).
+      - dependency-name: typescript
+        update-types: [version-update:semver-major]
 
   - package-ecosystem: github-actions
     directory: /
