@@ -172,7 +172,66 @@ flowchart LR
     W2 -->|no| Z
 ```
 
-## 5. Data model
+## 5. Frontend
+
+A single-page app. In development Vite serves it on :5173 and proxies `/api` to the API, so the browser sees a single origin: the refresh cookie works as-is and no CORS preflights are needed.
+
+```mermaid
+flowchart TB
+    M["<b>main.tsx</b><br/>QueryClient · MotionConfig · ThemeProvider · AuthProvider · router"]
+    M --> L["<b>Layout</b><br/>header · backdrop · footer · Outlet"]
+    L --> P1["Feed · Post · Profile<br/>public"]
+    L --> P2["Sign in · Register"]
+    L --> G["<b>RequireAuth</b>"] --> P3["Editor · Dashboard<br/>signed-in only"]
+    P1 & P2 & P3 --> Q["<b>TanStack Query</b><br/>cache · retries · optimistic likes"]
+    Q --> C["<b>api/client</b><br/>Bearer token · refresh on 401"]
+    C -->|"/api/v1"| API[(FastAPI)]
+    T["<b>api/schema.d.ts</b><br/>generated from openapi.json"] -.-> C
+```
+
+Only the feed ships in the first bundle. The other pages are lazy routes, so the Markdown pipeline (post page and editor) loads only when a reader opens a post.
+
+### 5.1 Session handling
+
+```mermaid
+sequenceDiagram
+    participant P as Page
+    participant C as api/client
+    participant API
+    P->>C: request
+    C->>API: Authorization: Bearer (in-memory token)
+    API-->>C: 401 expired
+    C->>C: join the one shared refresh<br/>(promise in this tab, Web Lock across tabs)
+    C->>API: POST /auth/refresh (cookie)
+    API-->>C: new access token
+    C->>API: retry original request
+    API-->>P: 200
+```
+
+- The access token is **never stored**: a reload restores the session through one refresh call, which only happens if the "has session" hint is set, so guests don't cause 401s.
+- Refreshes are serialized because refresh tokens are single use; two parallel ones would look like theft and end the session.
+- Permission checks in the UI (`lib/permissions.ts`) only hide buttons. The API enforces every rule itself.
+
+### 5.2 Rendering user content
+
+| Content | How it's rendered |
+|---|---|
+| Post body (Markdown) | `react-markdown` with raw HTML disabled, then `rehype-sanitize`; external links open in a new tab with `rel="noopener noreferrer nofollow ugc"` |
+| Comments, names, bios | Plain React text nodes, never HTML |
+| Cover art | Generated SVG, deterministic per slug; no uploaded images |
+
+### 5.3 Theming
+
+```mermaid
+flowchart LR
+    S["theme-init.js<br/>(before first paint)"] -->|"data-mode"| H["&lt;html&gt;"]
+    TP["ThemeProvider<br/>system · light · dark"] -->|"data-mode"| H
+    H --> V["--nb-* CSS variables"] --> TW["Tailwind colors<br/>(@theme inline)"]
+```
+
+One attribute switches every color, so components never branch on the theme. The mode choice is saved in `localStorage`; "system" follows `prefers-color-scheme` live.
+
+## 6. Data model
 
 ```mermaid
 erDiagram
@@ -189,7 +248,7 @@ erDiagram
 
 Full schema, constraints and design decisions: [database.md](database.md).
 
-## 6. Security layers
+## 7. Security layers
 
 ```mermaid
 flowchart TB
@@ -212,7 +271,7 @@ flowchart TB
     Repo -.-> App
 ```
 
-## 7. Observability
+## 8. Observability
 
 ```mermaid
 flowchart LR
@@ -223,7 +282,7 @@ flowchart LR
     OPS --> MT["/metrics<br/>Prometheus"]
 ```
 
-## 8. Implementation status
+## 9. Implementation status
 
 | Area | Status |
 |---|---|
@@ -232,7 +291,7 @@ flowchart LR
 | Authentication · rate limiting · profile | ✅ Done (v0.3.0) |
 | Posts & public browsing | ✅ Done (v0.4.0) |
 | Likes & comments | ✅ Done (v0.5.0) |
-| Frontend | Planned |
+| Frontend (feed, posts, auth, editor, dashboard, theming) | ✅ Done (v0.6.0) |
 | Indexes & query optimization | Planned |
 | Roles (user / moderator) | Planned |
 | Containers · CI · metrics | Planned |

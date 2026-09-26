@@ -39,6 +39,10 @@ sequenceDiagram
 
 > **Client note:** send at most one refresh request at a time. Two parallel refreshes with the same cookie look like reuse and end the session.
 
+## Typed clients
+
+The schema is exported to [`openapi.json`](openapi.json) and the web app generates its TypeScript types from it (`make api-types`). CI fails if either file is out of date with the code, so the frontend can't silently drift from the API.
+
 ## Endpoints
 
 | Method | Path | Auth | Success | Purpose |

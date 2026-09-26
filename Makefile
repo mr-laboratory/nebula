@@ -1,14 +1,16 @@
 # Developer commands. Run `make` to list them.
 .DEFAULT_GOAL := help
 BACKEND := cd backend &&
+FRONTEND := cd frontend &&
 
-.PHONY: help setup env dev test lint fmt typecheck check db-up db-down migrate migration seed psql
+.PHONY: help setup env dev web test lint fmt typecheck check web-check api-types db-up db-down migrate migration seed psql
 
 help: ## Show available commands
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  \033[36m%-10s\033[0m %s\n", $$1, $$2}'
 
 setup: env ## Install dependencies and git hooks
 	$(BACKEND) uv sync
+	$(FRONTEND) npm ci
 	pre-commit install
 
 env: ## Create .env with random secrets (if missing)
@@ -16,6 +18,9 @@ env: ## Create .env with random secrets (if missing)
 
 dev: ## Run the API with auto-reload on :8000
 	$(BACKEND) uv run uvicorn app.main:create_app --factory --reload --port 8000 --no-server-header
+
+web: ## Run the web app with hot reload on :5173 (proxies /api to :8000)
+	$(FRONTEND) npm run dev
 
 test: ## Run tests
 	$(BACKEND) uv run pytest
@@ -29,7 +34,14 @@ fmt: ## Auto-fix lint issues and format
 typecheck: ## Static type check
 	$(BACKEND) uv run mypy app tests scripts migrations
 
-check: lint typecheck test ## Everything CI runs
+web-check: ## Lint, format check, type check, test and build the web app
+	$(FRONTEND) npm run check
+
+check: lint typecheck test web-check ## Everything CI runs
+
+api-types: ## Re-export the OpenAPI schema and regenerate the frontend's API types
+	$(BACKEND) uv run python -m scripts.export_openapi > ../docs/openapi.json
+	$(FRONTEND) npm run api-types && npx prettier --write src/api/schema.d.ts >/dev/null
 
 db-up: ## Start Postgres + Redis (starts Colima first if installed)
 	@if command -v colima >/dev/null; then colima status >/dev/null 2>&1 || colima start; fi

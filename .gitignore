@@ -48,6 +48,9 @@ frontend/dist/
 *.tsbuildinfo
 npm-debug.log*
 
+# ─── Local UI screenshots (visual checks, never committed) ─
+.screenshots/
+
 # ─── Logs ─────────────────────────────────────────────────
 *.log
 logs/

@@ -1,4 +1,4 @@
-# Dependabot: weekly update PRs for Python dependencies and GitHub Actions.
+# Dependabot: weekly update PRs for Python and npm dependencies and GitHub Actions.
 version: 2
 updates:
   - package-ecosystem: uv
@@ -7,6 +7,14 @@ updates:
       interval: weekly
     groups:
       python-deps:
+        patterns: ["*"]
+
+  - package-ecosystem: npm
+    directory: /frontend
+    schedule:
+      interval: weekly
+    groups:
+      npm-deps:
         patterns: ["*"]
 
   - package-ecosystem: github-actions

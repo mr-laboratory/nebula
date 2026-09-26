@@ -1,0 +1,198 @@
+/* Design tokens (light and dark themes), base styles and signature effects (glass, backdrop). */
+@import 'tailwindcss';
+@import '@fontsource-variable/geist';
+@import '@fontsource-variable/geist-mono';
+@plugin '@tailwindcss/typography';
+
+@custom-variant dark (&:where([data-mode='dark'], [data-mode='dark'] *));
+
+/* Utilities read the --nb-* variables below, so switching theme is just changing attributes. */
+@theme inline {
+  --font-sans: var(--nb-font-sans);
+  --font-display: var(--nb-font-display);
+  --font-mono: var(--nb-font-mono);
+
+  --color-void: var(--nb-void);
+  --color-surface: var(--nb-surface);
+  --color-edge: var(--nb-edge);
+  --color-ink: var(--nb-ink);
+  --color-muted: var(--nb-muted);
+  --color-nova: var(--nb-nova);
+  --color-plasma: var(--nb-plasma);
+  --color-flare: var(--nb-flare);
+  --color-danger: var(--nb-danger);
+
+  --shadow-glow:
+    0 0 0 1px color-mix(in oklab, var(--nb-nova) var(--nb-glow-ring), transparent),
+    0 10px 40px -12px color-mix(in oklab, var(--nb-nova) var(--nb-glow-blur), transparent);
+}
+
+/* ─── Themes ─────────────────────────────────────────────
+   Dark is the default; light swaps neutrals, accents and effect strength. */
+
+:root {
+  --nb-font-sans: 'Geist Variable', ui-sans-serif, system-ui, sans-serif;
+  --nb-font-display: 'Geist Variable', ui-sans-serif, system-ui, sans-serif;
+  --nb-font-mono: 'Geist Mono Variable', ui-monospace, SFMono-Regular, monospace;
+
+  /* dark (default) */
+  --nb-surface: rgb(255 255 255 / 0.04);
+  --nb-edge: rgb(255 255 255 / 0.085);
+  --nb-star: rgb(255 255 255 / 0.55);
+  --nb-glow-ring: 30%;
+  --nb-glow-blur: 45%;
+  --nb-haze: 36%;
+  --nb-void: #0b0d1c;
+  --nb-ink: #e6e8f5;
+  --nb-muted: #9da2c2;
+  --nb-nova: #8b93f8;
+  --nb-plasma: #6cc4d6;
+  --nb-flare: #e59cc2;
+  --nb-danger: #f47b8c;
+}
+
+:root[data-mode='light'] {
+  --nb-surface: rgb(255 255 255 / 0.72);
+  --nb-edge: rgb(24 26 54 / 0.1);
+  --nb-star: rgb(80 72 214 / 0.35);
+  --nb-glow-ring: 22%;
+  --nb-glow-blur: 22%;
+  --nb-haze: 24%;
+  --nb-void: #f5f5fb;
+  --nb-ink: #1b1d33;
+  --nb-muted: #5d6180;
+  --nb-nova: #5048d6;
+  --nb-plasma: #0e7c93;
+  --nb-flare: #b8336a;
+  --nb-danger: #d62f4b;
+}
+
+@layer base {
+  html {
+    color-scheme: dark;
+    background: var(--color-void);
+  }
+  html[data-mode='light'] {
+    color-scheme: light;
+  }
+  /* No body background: it would paint over the fixed backdrop (html carries the base color). */
+  body {
+    @apply min-h-dvh font-sans text-ink antialiased;
+  }
+  ::selection {
+    background: color-mix(in oklab, var(--nb-nova) 30%, transparent);
+  }
+  :focus-visible {
+    outline: 2px solid var(--color-plasma);
+    outline-offset: 2px;
+  }
+}
+
+/* Post body colors follow the theme instead of Typography's fixed gray scales. */
+:root .prose {
+  --tw-prose-body: color-mix(in oklab, var(--nb-ink) 88%, transparent);
+  --tw-prose-headings: var(--nb-ink);
+  --tw-prose-lead: var(--nb-muted);
+  --tw-prose-links: var(--nb-plasma);
+  --tw-prose-bold: var(--nb-ink);
+  --tw-prose-counters: var(--nb-muted);
+  --tw-prose-bullets: color-mix(in oklab, var(--nb-muted) 70%, transparent);
+  --tw-prose-hr: var(--nb-edge);
+  --tw-prose-quotes: var(--nb-ink);
+  --tw-prose-quote-borders: var(--nb-nova);
+  --tw-prose-captions: var(--nb-muted);
+  --tw-prose-kbd: var(--nb-ink);
+  --tw-prose-code: var(--nb-ink);
+  --tw-prose-pre-code: var(--nb-ink);
+  --tw-prose-pre-bg: transparent;
+  --tw-prose-th-borders: var(--nb-edge);
+  --tw-prose-td-borders: var(--nb-edge);
+}
+
+@utility glass {
+  background: var(--color-surface);
+  border: 1px solid var(--color-edge);
+  backdrop-filter: blur(14px) saturate(140%);
+  -webkit-backdrop-filter: blur(14px) saturate(140%);
+}
+
+@utility text-gradient {
+  background: linear-gradient(100deg, var(--color-nova), var(--color-plasma));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+@utility starfield {
+  background-image:
+    radial-gradient(1px 1px at 12% 18%, var(--nb-star), transparent 60%),
+    radial-gradient(1px 1px at 68% 42%, var(--nb-star), transparent 60%),
+    radial-gradient(1.5px 1.5px at 38% 78%, var(--nb-star), transparent 60%),
+    radial-gradient(1px 1px at 86% 12%, var(--nb-star), transparent 60%),
+    radial-gradient(1px 1px at 22% 58%, var(--nb-star), transparent 60%);
+  background-size: 480px 480px;
+}
+
+/* ─── Page backdrop ──────────────────────────────────────
+   Fixed behind everything, so long pages never scroll into a flat, empty background.
+   Unlayered on purpose: these must win over the starfield utility on the same element. */
+
+.nb-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: -10;
+  overflow: hidden;
+  pointer-events: none;
+  background: linear-gradient(
+    180deg,
+    color-mix(in oklab, var(--nb-nova) 9%, var(--nb-void)) 0%,
+    var(--nb-void) 55%,
+    color-mix(in oklab, var(--nb-plasma) 5%, var(--nb-void)) 100%
+  );
+}
+.nb-backdrop > * {
+  position: absolute;
+}
+/* haze: a soft glow along the top, a hint of a second color low down, stars, grain */
+.nb-glow-a {
+  inset: -35vh -20vw auto;
+  height: 85vh;
+  background: radial-gradient(
+    closest-side,
+    color-mix(in oklab, var(--nb-nova) var(--nb-haze), transparent),
+    transparent
+  );
+  filter: blur(20px);
+}
+.nb-glow-b {
+  right: -20vw;
+  bottom: -30vh;
+  width: 70vw;
+  height: 70vh;
+  background: radial-gradient(
+    closest-side,
+    color-mix(in oklab, var(--nb-plasma) calc(var(--nb-haze) * 0.6), transparent),
+    transparent
+  );
+  filter: blur(30px);
+}
+.nb-stars {
+  inset: 0;
+  opacity: 0.55;
+}
+.nb-grain {
+  inset: 0;
+  opacity: 0.05;
+  mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

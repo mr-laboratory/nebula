@@ -9,6 +9,7 @@ repos:
       - id: check-merge-conflict
       - id: check-yaml
       - id: check-json
+        exclude: ^frontend/tsconfig.*\.json$  # JSONC: TypeScript allows comments here
       - id: check-toml
       - id: end-of-file-fixer
       - id: trailing-whitespace
