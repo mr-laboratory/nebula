@@ -1,0 +1,90 @@
+/* Design tokens, base styles and a few signature effects (glass, glow, nebula background). */
+@import 'tailwindcss';
+@import '@fontsource-variable/inter';
+@import '@fontsource-variable/space-grotesk';
+@plugin '@tailwindcss/typography';
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  --font-sans: 'Inter Variable', ui-sans-serif, system-ui, sans-serif;
+  --font-display: 'Space Grotesk Variable', 'Inter Variable', ui-sans-serif, sans-serif;
+
+  --color-void: #05060f;
+  --color-surface: rgb(255 255 255 / 0.04);
+  --color-edge: rgb(255 255 255 / 0.09);
+  --color-ink: #e7e9ff;
+  --color-muted: #9aa0c3;
+  --color-nova: #a78bfa;
+  --color-plasma: #22d3ee;
+  --color-flare: #f472b6;
+  --color-danger: #fb7185;
+
+  --shadow-glow: 0 0 0 1px rgb(167 139 250 / 0.35), 0 8px 40px -8px rgb(139 92 246 / 0.45);
+
+  --animate-drift: drift 40s ease-in-out infinite alternate;
+  @keyframes drift {
+    from {
+      transform: translate3d(-4%, -2%, 0) scale(1);
+    }
+    to {
+      transform: translate3d(4%, 3%, 0) scale(1.08);
+    }
+  }
+}
+
+@layer base {
+  html {
+    color-scheme: dark;
+    background: var(--color-void);
+  }
+  body {
+    @apply min-h-dvh bg-void font-sans text-ink antialiased;
+  }
+  ::selection {
+    background: rgb(167 139 250 / 0.35);
+  }
+  :focus-visible {
+    outline: 2px solid var(--color-plasma);
+    outline-offset: 2px;
+  }
+}
+
+@utility glass {
+  background: var(--color-surface);
+  border: 1px solid var(--color-edge);
+  backdrop-filter: blur(14px) saturate(140%);
+  -webkit-backdrop-filter: blur(14px) saturate(140%);
+}
+
+@utility text-gradient {
+  background: linear-gradient(
+    100deg,
+    var(--color-plasma),
+    var(--color-nova) 45%,
+    var(--color-flare)
+  );
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+@utility starfield {
+  background-image:
+    radial-gradient(1px 1px at 12% 18%, rgb(255 255 255 / 0.55), transparent 60%),
+    radial-gradient(1px 1px at 68% 42%, rgb(255 255 255 / 0.4), transparent 60%),
+    radial-gradient(1.5px 1.5px at 38% 78%, rgb(255 255 255 / 0.5), transparent 60%),
+    radial-gradient(1px 1px at 86% 12%, rgb(255 255 255 / 0.35), transparent 60%),
+    radial-gradient(1px 1px at 22% 58%, rgb(255 255 255 / 0.3), transparent 60%);
+  background-size: 480px 480px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
