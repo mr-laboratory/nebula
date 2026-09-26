@@ -11,7 +11,12 @@ from app.api.v1.router import api_router
 from app.core.config import Settings, get_settings
 from app.core.errors import register_exception_handlers
 from app.core.logging import configure_logging
-from app.core.middleware import RequestContextMiddleware, SecurityHeadersMiddleware
+from app.core.middleware import (
+    CompressionMiddleware,
+    HTTPCacheMiddleware,
+    RequestContextMiddleware,
+    SecurityHeadersMiddleware,
+)
 from app.db.session import Database
 
 
@@ -30,7 +35,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     docs_enabled = not settings.is_production
     app = FastAPI(
         title=settings.app_name,
-        version="0.6.0",
+        version="0.7.0",
         debug=settings.app_debug,
         docs_url="/docs" if docs_enabled else None,
         redoc_url="/redoc" if docs_enabled else None,
@@ -45,6 +50,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     )
 
     # Starlette runs the last-added middleware first, so the order below is inner → outer.
+    prefix = settings.api_prefix
+    app.add_middleware(
+        HTTPCacheMiddleware,
+        paths=(f"{prefix}/posts", f"{prefix}/tags", f"{prefix}/users"),  # public reads
+    )
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_origins,
@@ -53,6 +63,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         allow_headers=["Authorization", "Content-Type", "X-Request-ID"],
         expose_headers=["X-Request-ID"],
     )
+    app.add_middleware(CompressionMiddleware, skip_paths=(f"{prefix}/auth",))
     app.add_middleware(RequestContextMiddleware)
     app.add_middleware(SecurityHeadersMiddleware, hsts=settings.is_production)
 
