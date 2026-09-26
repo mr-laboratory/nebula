@@ -3,7 +3,7 @@
 BACKEND := cd backend &&
 FRONTEND := cd frontend &&
 
-.PHONY: help setup env dev web test lint fmt typecheck check web-check api-types db-up db-down migrate migration seed psql
+.PHONY: help setup env dev web test lint fmt typecheck check web-check api-types db-up db-down migrate migration seed seed-large explain psql
 
 help: ## Show available commands
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  \033[36m%-10s\033[0m %s\n", $$1, $$2}'
@@ -59,6 +59,12 @@ migration: ## Autogenerate a migration: make migration m="add x"
 
 seed: ## Reset and fill the local DB with demo data
 	$(BACKEND) uv run python -m scripts.seed --reset
+
+seed-large: ## Reset and fill the local DB with ~10k posts (for query tuning)
+	$(BACKEND) uv run python -m scripts.seed --reset --users 500 --posts-per-user 20
+
+explain: ## Print EXPLAIN ANALYZE timings for the hot queries (run after seed-large)
+	$(BACKEND) uv run python -m scripts.explain
 
 psql: ## Open a psql shell on the local DB
 	docker compose exec db sh -c 'psql -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"'

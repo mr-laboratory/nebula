@@ -1,6 +1,7 @@
 """Fill the local database with deterministic demo data. Refuses to run in production.
 
 Usage: uv run python -m scripts.seed [--users 10] [--posts-per-user 3] [--reset]
+Large dataset for query tuning: --users 500 --posts-per-user 20 (about 10k posts).
 """
 
 import argparse
@@ -10,7 +11,7 @@ import sys
 from datetime import UTC, datetime, timedelta
 
 from faker import Faker
-from sqlalchemy import func, select, text
+from sqlalchemy import func, insert, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
@@ -22,6 +23,7 @@ SEED = 42
 TAGS = ["python", "fastapi", "react", "postgres", "design", "devops", "security", "career"]
 # "!" can never equal a real password hash, so seeded accounts cannot log in.
 UNUSABLE_PASSWORD = "!"  # noqa: S105
+MAX_LIKES_PER_POST = 25  # keeps a large seed linear instead of users x posts
 
 
 def make_users(fake: Faker, count: int, role: Role) -> list[User]:
@@ -54,7 +56,9 @@ def make_post(fake: Faker, author: User, tags: list[Tag], index: int) -> Post:
         content=f"## {fake.sentence(nb_words=4)}\n\n{paragraphs}",
         status=PostStatus.PUBLISHED if published else PostStatus.DRAFT,
         published_at=(
-            datetime.now(UTC) - timedelta(days=fake.random_int(0, 90)) if published else None
+            datetime.now(UTC) - timedelta(minutes=fake.random_int(0, 90 * 24 * 60))
+            if published
+            else None
         ),
         tags=fake.random_sample(tags, length=fake.random_int(1, 3)),
     )
@@ -75,13 +79,28 @@ async def seed(session: AsyncSession, users_count: int, posts_per_user: int) -> 
     session.add_all([*tags, *users, *posts])
     await session.flush()
 
+    # Likes and comments go in as multi-row INSERTs: one round trip per batch, not per row.
+    likes: list[dict[str, object]] = []
+    comments: list[dict[str, object]] = []
     for post in (p for p in posts if p.status is PostStatus.PUBLISHED):
         others = [u for u in users if u.id != post.author_id]  # nobody likes their own post
-        for fan in fake.random_sample(others, length=fake.random_int(0, len(others))):
-            session.add(Like(user_id=fan.id, post_id=post.id))
-        for _ in range(fake.random_int(0, 4)):
-            commenter = fake.random_element(others)
-            session.add(Comment(post_id=post.id, author_id=commenter.id, body=fake.paragraph()))
+        fans = fake.random_int(0, min(len(others), MAX_LIKES_PER_POST))
+        likes += [
+            {"user_id": fan.id, "post_id": post.id}
+            for fan in fake.random_sample(others, length=fans)
+        ]
+        comments += [
+            {
+                "post_id": post.id,
+                "author_id": fake.random_element(others).id,
+                "body": fake.paragraph(),
+            }
+            for _ in range(fake.random_int(0, 4))
+        ]
+    if likes:
+        await session.execute(insert(Like), likes)
+    if comments:
+        await session.execute(insert(Comment), comments)
 
 
 async def main() -> int:
