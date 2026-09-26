@@ -15,7 +15,7 @@ from app.core.slugs import slugify, with_suffix
 from app.models import Post, PostStatus, User
 from app.repositories import posts as repo
 from app.repositories import tags as tag_repo
-from app.repositories.posts import PREVIEW_LENGTH, PostRow
+from app.repositories.posts import PREVIEW_LENGTH, PostRow, PostStats
 from app.schemas.common import Page
 from app.schemas.post import (
     MyPostFilters,
@@ -30,13 +30,14 @@ from app.services.permissions import POST_DELETE_ANY, has_permission
 
 POST_NOT_FOUND = "Post not found."
 NOT_YOUR_POST = "You can only change your own posts."
+NOT_PUBLISHED = "Publish the post before it can be liked or commented on."
 SLUG_ATTEMPTS = 5
 
 
 # ─── Response mapping ─────────────────────────────────────
 
 
-def _fields(post: Post, excerpt: str) -> dict[str, object]:
+def _fields(post: Post, excerpt: str, stats: PostStats, viewer: User | None) -> dict[str, object]:
     return {
         "id": post.id,
         "slug": post.slug,
@@ -45,47 +46,84 @@ def _fields(post: Post, excerpt: str) -> dict[str, object]:
         "status": post.status,
         "author": AuthorPublic.model_validate(post.author),
         "tags": sorted(tag.name for tag in post.tags),
+        "like_count": stats.like_count,
+        "comment_count": stats.comment_count,
+        "liked_by_me": stats.liked if viewer else None,
         "published_at": post.published_at,
         "created_at": post.created_at,
         "updated_at": post.updated_at,
     }
 
 
-def _summary(row: PostRow) -> PostSummary:
-    post, preview = row
-    return PostSummary.model_validate(_fields(post, preview))
+def _summary(row: PostRow, viewer: User | None) -> PostSummary:
+    return PostSummary.model_validate(_fields(row.post, row.preview, row.stats, viewer))
 
 
-def _detail(post: Post) -> PostDetail:
+def _detail(post: Post, stats: PostStats, viewer: User | None) -> PostDetail:
     excerpt = post.excerpt or post.content[:PREVIEW_LENGTH]  # same rule as the SQL preview
-    return PostDetail.model_validate({**_fields(post, excerpt), "content": post.content})
+    fields = _fields(post, excerpt, stats, viewer)
+    return PostDetail.model_validate({**fields, "content": post.content})
+
+
+async def _detail_with_stats(session: AsyncSession, post: Post, viewer: User | None) -> PostDetail:
+    stats = await repo.get_stats(session, post.id, viewer.id if viewer else None)
+    return _detail(post, stats, viewer)
 
 
 # ─── Reading ──────────────────────────────────────────────
 
 
-async def list_feed(session: AsyncSession, filters: PostFilters) -> Page[PostSummary]:
-    rows, total = await repo.list_public(session, filters)
+async def list_feed(
+    session: AsyncSession, filters: PostFilters, viewer: User | None
+) -> Page[PostSummary]:
+    rows, total = await repo.list_public(session, filters, viewer.id if viewer else None)
     return Page(
-        items=[_summary(r) for r in rows], total=total, limit=filters.limit, offset=filters.offset
+        items=[_summary(r, viewer) for r in rows],
+        total=total,
+        limit=filters.limit,
+        offset=filters.offset,
     )
 
 
 async def list_mine(session: AsyncSession, user: User, filters: MyPostFilters) -> Page[PostSummary]:
     rows, total = await repo.list_by_author(session, user.id, filters)
     return Page(
-        items=[_summary(r) for r in rows], total=total, limit=filters.limit, offset=filters.offset
+        items=[_summary(r, user) for r in rows],
+        total=total,
+        limit=filters.limit,
+        offset=filters.offset,
+    )
+
+
+def _can_read(post: Post | None, viewer: User | None) -> bool:
+    if post is None:
+        return False
+    return post.status == PostStatus.PUBLISHED or (
+        viewer is not None and viewer.id == post.author_id
     )
 
 
 async def get_visible(session: AsyncSession, slug: str, viewer: User | None) -> PostDetail:
     post = await repo.get_by_slug(session, slug)
-    if post is None:
+    if post is None or not _can_read(post, viewer):
         raise NotFoundError(POST_NOT_FOUND)
-    is_owner = viewer is not None and viewer.id == post.author_id
-    if post.status != PostStatus.PUBLISHED and not is_owner:
+    return await _detail_with_stats(session, post, viewer)
+
+
+async def get_readable(session: AsyncSession, post_id: uuid.UUID, viewer: User | None) -> Post:
+    """The post if `viewer` may read it (published, or their own draft); otherwise 404."""
+    post = await repo.get_by_id(session, post_id)
+    if post is None or not _can_read(post, viewer):
         raise NotFoundError(POST_NOT_FOUND)
-    return _detail(post)
+    return post
+
+
+async def get_published(session: AsyncSession, post_id: uuid.UUID, user: User) -> Post:
+    """The post if it is open for likes and comments: readable by `user` and published."""
+    post = await get_readable(session, post_id, user)
+    if post.status != PostStatus.PUBLISHED:
+        raise ConflictError(NOT_PUBLISHED)  # only the author can reach this (own draft)
+    return post
 
 
 # ─── Ownership ────────────────────────────────────────────
@@ -107,10 +145,10 @@ async def _get_for_change(
     raise ForbiddenError(NOT_YOUR_POST)
 
 
-async def _reload(session: AsyncSession, post_id: uuid.UUID) -> PostDetail:
+async def _reload(session: AsyncSession, post_id: uuid.UUID, viewer: User) -> PostDetail:
     post = await repo.get_by_id(session, post_id)
     assert post is not None  # noqa: S101  (we just wrote it in this transaction)
-    return _detail(post)
+    return await _detail_with_stats(session, post, viewer)
 
 
 # ─── Slugs ────────────────────────────────────────────────
@@ -154,7 +192,7 @@ async def create(session: AsyncSession, author: User, data: PostCreate) -> PostD
         tags=await tag_repo.get_or_create(session, data.tags),
     )
     await _save_with_unique_slug(session, post, slugify(data.title))
-    return await _reload(session, post.id)
+    return await _reload(session, post.id, author)
 
 
 async def update(
@@ -178,7 +216,7 @@ async def update(
     await session.flush()
     if retitle and new_base is not None:
         await _save_with_unique_slug(session, post, new_base)
-    return await _reload(session, post.id)
+    return await _reload(session, post.id, user)
 
 
 async def set_status(
@@ -191,7 +229,7 @@ async def set_status(
         if status == PostStatus.PUBLISHED and post.published_at is None:
             post.published_at = datetime.now(UTC)  # first publication; kept if unpublished
         await session.flush()
-    return await _reload(session, post.id)
+    return await _reload(session, post.id, user)
 
 
 async def delete(session: AsyncSession, user: User, post_id: uuid.UUID) -> None:

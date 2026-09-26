@@ -1,14 +1,14 @@
-"""Post queries: visibility rules, filters, pagination, and loading authors/tags without N+1."""
+"""Post queries: visibility, filters, pagination, counts, and relations loaded without N+1."""
 
 import uuid
 from collections.abc import Sequence
-from typing import Any
+from typing import Any, NamedTuple
 
-from sqlalchemy import ColumnElement, Select, exists, func, or_, select
+from sqlalchemy import ColumnElement, Select, exists, false, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import contains_eager, defer, selectinload
 
-from app.models import Post, PostStatus, Tag, User
+from app.models import Comment, Like, Post, PostStatus, Tag, User
 from app.schemas.post import MyPostFilters, PostFilters
 
 PREVIEW_LENGTH = 280
@@ -21,8 +21,32 @@ IS_PUBLIC: tuple[ColumnElement[bool], ...] = (
 # The author's excerpt, or else the start of the content, computed in SQL so the
 # (possibly large) content never leaves the database for list pages.
 PREVIEW = func.coalesce(Post.excerpt, func.left(Post.content, PREVIEW_LENGTH)).label("preview")
+# Correlated subqueries: computed per row inside the same statement, so no extra round trips.
+LIKE_COUNT = select(func.count()).select_from(Like).where(Like.post_id == Post.id).scalar_subquery()
+COMMENT_COUNT = (
+    select(func.count())
+    .select_from(Comment)
+    .where(Comment.post_id == Post.id, Comment.deleted_at.is_(None))
+    .scalar_subquery()
+)
 
-type PostRow = tuple[Post, str]
+
+class PostStats(NamedTuple):
+    like_count: int
+    comment_count: int
+    liked: bool  # always False for anonymous viewers
+
+
+class PostRow(NamedTuple):
+    post: Post
+    preview: str
+    stats: PostStats
+
+
+def _liked_by(viewer_id: uuid.UUID | None) -> ColumnElement[bool]:
+    if viewer_id is None:
+        return false()
+    return exists().where(Like.post_id == Post.id, Like.user_id == viewer_id)
 
 
 def _with_relations(stmt: Select[Post]) -> Select[Post]:
@@ -41,12 +65,13 @@ async def _page(
     order_by: Sequence[ColumnElement[Any]],
     limit: int,
     offset: int,
+    viewer_id: uuid.UUID | None,
 ) -> tuple[list[PostRow], int]:
     total = await session.scalar(
         select(func.count()).select_from(Post).join(Post.author).where(*conditions)
     )
     stmt = (
-        select(Post, PREVIEW)
+        select(Post, PREVIEW, LIKE_COUNT, COMMENT_COUNT, _liked_by(viewer_id))
         .join(Post.author)
         .options(
             contains_eager(Post.author),
@@ -59,10 +84,15 @@ async def _page(
         .offset(offset)
     )
     rows = (await session.execute(stmt)).all()
-    return [(post, preview) for post, preview in rows], total or 0
+    return [
+        PostRow(post, preview, PostStats(likes, comments, liked))
+        for post, preview, likes, comments, liked in rows
+    ], total or 0
 
 
-async def list_public(session: AsyncSession, filters: PostFilters) -> tuple[list[PostRow], int]:
+async def list_public(
+    session: AsyncSession, filters: PostFilters, viewer_id: uuid.UUID | None
+) -> tuple[list[PostRow], int]:
     conditions = list(IS_PUBLIC)
     if filters.tag:
         conditions.append(Post.tags.any(Tag.name == filters.tag))
@@ -78,7 +108,7 @@ async def list_public(session: AsyncSession, filters: PostFilters) -> tuple[list
         Post.published_at.desc() if newest else Post.published_at.asc(),
         Post.id.desc() if newest else Post.id.asc(),  # tie-breaker keeps pages stable
     )
-    return await _page(session, conditions, order_by, filters.limit, filters.offset)
+    return await _page(session, conditions, order_by, filters.limit, filters.offset, viewer_id)
 
 
 async def list_by_author(
@@ -88,7 +118,7 @@ async def list_by_author(
     if filters.status:
         conditions.append(Post.status == filters.status)
     order_by = (Post.updated_at.desc(), Post.id.desc())
-    return await _page(session, conditions, order_by, filters.limit, filters.offset)
+    return await _page(session, conditions, order_by, filters.limit, filters.offset, author_id)
 
 
 async def get_by_slug(session: AsyncSession, slug: str) -> Post | None:
@@ -104,6 +134,14 @@ async def get_by_id(session: AsyncSession, post_id: uuid.UUID) -> Post | None:
         .execution_options(populate_existing=True)  # always return fresh column values
     )
     return (await session.execute(stmt)).scalar_one_or_none()
+
+
+async def get_stats(
+    session: AsyncSession, post_id: uuid.UUID, viewer_id: uuid.UUID | None
+) -> PostStats:
+    stmt = select(LIKE_COUNT, COMMENT_COUNT, _liked_by(viewer_id)).where(Post.id == post_id)
+    likes, comments, liked = (await session.execute(stmt)).one()
+    return PostStats(likes, comments, liked)
 
 
 async def slug_taken(session: AsyncSession, slug: str) -> bool:

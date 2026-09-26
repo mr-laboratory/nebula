@@ -58,6 +58,12 @@ sequenceDiagram
 | `POST` | `/posts/{id}/publish` | Bearer (owner) | `200` | Make public (idempotent) |
 | `POST` | `/posts/{id}/unpublish` | Bearer (owner) | `200` | Back to draft (idempotent) |
 | `DELETE` | `/posts/{id}` | Bearer (owner or moderator) | `204` | Soft-delete |
+| `PUT` | `/posts/{id}/like` | Bearer (not the author) | `200` | Like a post (idempotent) |
+| `DELETE` | `/posts/{id}/like` | Bearer | `200` | Remove your like (idempotent) |
+| `GET` | `/posts/{id}/comments` | optional | `200` | Comments, oldest first |
+| `POST` | `/posts/{id}/comments` | Bearer | `201` | Add a comment |
+| `PATCH` | `/comments/{id}` | Bearer (comment author) | `200` | Edit a comment |
+| `DELETE` | `/comments/{id}` | Bearer (comment author, post author or moderator) | `204` | Delete a comment |
 | `GET` | `/tags` | — | `200` | Tags in use, most popular first |
 | `GET` | `/health/live` | — | `200` | Process is running |
 | `GET` | `/health/ready` | — | `200` / `503` | Database and Redis are reachable |
@@ -174,13 +180,14 @@ A draft answers `404` rather than `403` to anyone but its author, so its existen
     "excerpt": "Some *markdown* content.", "status": "published",
     "author": { "username": "ada", "display_name": "Ada" },
     "tags": ["python"],
+    "like_count": 3, "comment_count": 2, "liked_by_me": false,
     "published_at": "2026-09-25T18:30:00Z", "created_at": "…", "updated_at": "…"
   }],
   "total": 1, "limit": 20, "offset": 0
 }
 ```
 
-List items never include `content`; `excerpt` falls back to the first 280 characters of it. The page is loaded in 3 queries whatever its size (count, posts with authors, tags).
+List items never include `content`; `excerpt` falls back to the first 280 characters of it. `liked_by_me` is `null` when signed out. The page is loaded in 3 queries whatever its size (count; posts with authors, like and comment counts; tags).
 
 ### `GET /posts/{slug}`
 
@@ -221,6 +228,54 @@ Soft delete: the post disappears everywhere, including for its author, and its s
 
 Counts published posts only. `?limit=` 1–100, default 50.
 
+## Likes
+
+### `PUT /posts/{id}/like` · `DELETE /posts/{id}/like`
+
+No body. Both return the post's current state, and repeating either call changes nothing:
+
+```json
+{ "like_count": 4, "liked_by_me": true }
+```
+
+| Case | Result |
+|---|---|
+| Your own post | `403` |
+| Someone else's draft, deleted or unknown post | `404` |
+| Your own draft | `409`: publish it first |
+
+## Comments
+
+Comments are flat (no replies-to-replies), plain text, and listed oldest first.
+
+### `GET /posts/{id}/comments`
+
+```json
+{
+  "items": [
+    { "id": "9a1e…", "body": "Great read", "author": { "username": "bob", "display_name": "Bob" },
+      "is_deleted": false, "edited": true, "created_at": "…" },
+    { "id": "c47b…", "body": null, "author": null, "is_deleted": true, "edited": false, "created_at": "…" }
+  ],
+  "total": 2, "limit": 20, "offset": 0
+}
+```
+
+Public for published posts; a draft's comments are visible to its author only. A deleted comment stays in place as a placeholder with its text and author removed, so the conversation keeps its shape. `total` counts placeholders; a post's `comment_count` does not.
+
+### `POST /posts/{id}/comments` · `PATCH /comments/{id}`
+
+```json
+{ "body": "Great read" }
+```
+
+`body`: 1–5 000 characters after trimming whitespace. It is stored as plain text; clients must render it as text, never as HTML. Commenting follows the same rules as liking (`404` for hidden posts, `409` for your own draft). `edited` becomes `true` once the text changes.
+
+| Action | Comment author | Post author | Moderator | Anyone else |
+|---|---|---|---|---|
+| Edit | ✓ | `403` | `403` | `403` |
+| Delete | ✓ | ✓ | ✓ | `403` |
+
 ## Errors
 
 ```json
@@ -246,12 +301,15 @@ Counts published posts only. `?limit=` 1–100, default 50.
 
 ## Rate limits
 
-Fixed windows, counted in Redis. Emails are hashed before use as keys.
+Fixed windows, counted in Redis. Emails and user IDs are hashed before use as keys.
 
 | Endpoint | Limit |
 |---|---|
 | `/auth/login` | 5 / minute per IP **and** 10 / 15 minutes per email |
 | `/auth/register` | 10 / hour per IP |
 | `/auth/refresh` | 30 / minute per IP |
+| `POST /posts/{id}/comments` | 10 / minute per user |
+| `PATCH /comments/{id}` | 30 / minute per user |
+| `PUT`/`DELETE /posts/{id}/like` | 60 / minute per user |
 
 If Redis is unavailable the limiter **fails open** (requests are allowed and a warning is logged). This keeps sign-in available during a cache outage, and Argon2 hashing still makes brute force slow.

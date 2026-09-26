@@ -62,7 +62,7 @@ sequenceDiagram
     participant DB as PostgreSQL
     V->>API: GET /posts?tag=python&limit=20
     API->>DB: 1 · COUNT(*) matching posts
-    API->>DB: 2 · posts JOIN authors (preview only, no content)
+    API->>DB: 2 · posts JOIN authors + like/comment counts (preview only)
     API->>DB: 3 · tags WHERE post_id IN (page)
     Note over API,DB: always 3 queries, whatever the page size (no N+1)
     API-->>V: 200 {items, total, limit, offset}
@@ -146,22 +146,30 @@ flowchart LR
 flowchart LR
     L["PUT /posts/{id}/like"] --> S{Signed in?}
     S -->|no| U[401]
-    S -->|yes| O{Own post?}
+    S -->|yes| V{"Post visible<br/>and published?"}
+    V -->|"hidden"| NF[404]
+    V -->|"own draft"| CF[409]
+    V -->|yes| O{Own post?}
     O -->|yes| F[403]
-    O -->|no| I["INSERT … ON CONFLICT DO NOTHING<br/>PK (user_id, post_id)"] --> N["204<br/>idempotent"]
+    O -->|no| I["INSERT … ON CONFLICT DO NOTHING<br/>PK (user_id, post_id)"] --> N["200 {like_count, liked_by_me}<br/>idempotent"]
 ```
+
+`DELETE` removes the row the same way. Counts are correlated subqueries inside the feed query, so the feed stays at 3 queries.
 
 ### 4.5 Comments
 
 ```mermaid
 flowchart LR
-    R["GET /posts/{id}/comments"] --> P[200 paginated · public]
-    C["POST /posts/{id}/comments"] --> S{Signed in +<br/>post published?}
+    R["GET /posts/{id}/comments"] --> P["200 paginated · public<br/>deleted → placeholder"]
+    C["POST /posts/{id}/comments"] --> S{"Signed in +<br/>post published?"}
     S -->|yes| K[201 created]
-    S -->|no| X[401 / 404]
-    E["PATCH / DELETE /comments/{id}"] --> W{"Comment author?<br/>Moderator (delete)?"}
-    W -->|yes| Y[200 / 204]
+    S -->|no| X[401 / 404 / 409]
+    E["PATCH /comments/{id}"] --> W{Comment author?}
+    W -->|yes| Y[200]
     W -->|no| Z[403]
+    D["DELETE /comments/{id}"] --> W2{"Comment author,<br/>post author or<br/>comment:delete:any?"}
+    W2 -->|yes| Y2["204 · soft delete"]
+    W2 -->|no| Z
 ```
 
 ## 5. Data model
@@ -223,7 +231,7 @@ flowchart LR
 | Database · migrations · readiness | ✅ Done (v0.2.0) |
 | Authentication · rate limiting · profile | ✅ Done (v0.3.0) |
 | Posts & public browsing | ✅ Done (v0.4.0) |
-| Likes & comments | Planned |
+| Likes & comments | ✅ Done (v0.5.0) |
 | Frontend | Planned |
 | Indexes & query optimization | Planned |
 | Roles (user / moderator) | Planned |
