@@ -64,7 +64,7 @@ function SearchBox({ value, onSearch }: { value: string; onSearch: (q: string) =
   }
 
   return (
-    <label className="flex h-11 flex-1 items-center gap-2 rounded-xl px-3.5 glass focus-within:border-nova/60 focus-within:ring-4 focus-within:ring-nova/15">
+    <label className="flex h-11 items-center gap-2 rounded-xl px-3.5 glass focus-within:border-nova/60 focus-within:ring-4 focus-within:ring-nova/15 sm:flex-1">
       <Search className="size-4 text-muted" aria-hidden />
       <span className="sr-only">Search posts</span>
       <input
@@ -121,9 +121,7 @@ export function FeedPage() {
                 onClick={() => update({ sort: sort.value === 'newest' ? null : sort.value })}
                 className={cn(
                   'rounded-lg px-4 text-sm transition',
-                  filters.sort === sort.value
-                    ? 'bg-white/10 text-ink'
-                    : 'text-muted hover:text-ink',
+                  filters.sort === sort.value ? 'bg-ink/10 text-ink' : 'text-muted hover:text-ink',
                 )}
               >
                 {sort.label}

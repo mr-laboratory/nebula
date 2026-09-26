@@ -1,7 +1,8 @@
 // Small presentational pieces: glass card, tag chip, skeleton, avatar.
 import type { ComponentProps } from 'react'
 
-import { cn, gradientFor, initials } from '@/lib/utils'
+import { avatarBackground } from '@/lib/covers'
+import { cn, initials } from '@/lib/utils'
 
 export function Card({ className, ...props }: ComponentProps<'div'>) {
   return <div className={cn('rounded-2xl glass', className)} {...props} />
@@ -18,7 +19,7 @@ export function Chip({
         'inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-medium transition',
         active
           ? 'border-plasma/60 bg-plasma/15 text-plasma'
-          : 'border-edge bg-white/[0.03] text-muted hover:border-nova/50 hover:text-ink',
+          : 'border-edge bg-ink/[0.03] text-muted hover:border-nova/50 hover:text-ink',
         className,
       )}
       {...props}
@@ -27,7 +28,7 @@ export function Chip({
 }
 
 export function Skeleton({ className, ...props }: ComponentProps<'div'>) {
-  return <div className={cn('animate-pulse rounded-lg bg-white/[0.06]', className)} {...props} />
+  return <div className={cn('animate-pulse rounded-lg bg-ink/[0.07]', className)} {...props} />
 }
 
 export function Avatar({
@@ -43,10 +44,10 @@ export function Avatar({
     <span
       aria-hidden
       className={cn(
-        'inline-grid size-8 shrink-0 place-items-center rounded-full text-xs font-semibold text-white ring-1 ring-white/20',
+        'inline-grid size-8 shrink-0 place-items-center rounded-full text-xs font-semibold text-void ring-1 ring-edge',
         className,
       )}
-      style={{ background: gradientFor(seed) }}
+      style={{ background: avatarBackground(seed) }}
     >
       {initials(name)}
     </span>

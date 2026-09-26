@@ -4,7 +4,7 @@ import { useId, type ComponentProps, type ReactNode } from 'react'
 import { cn } from '@/lib/utils'
 
 const control =
-  'w-full rounded-xl border border-edge bg-white/[0.03] px-3.5 text-ink placeholder:text-muted/60 transition outline-none focus:border-nova/60 focus:bg-white/[0.05] focus:ring-4 focus:ring-nova/15 aria-invalid:border-danger/70'
+  'w-full rounded-xl border border-edge bg-ink/[0.03] px-3.5 text-ink placeholder:text-muted/60 transition outline-none focus:border-nova/60 focus:bg-ink/[0.05] focus:ring-4 focus:ring-nova/15 aria-invalid:border-danger/70'
 
 type FieldProps = { label: string; error?: string; hint?: ReactNode }
 
@@ -59,5 +59,26 @@ export function TextArea({ className, ...props }: ComponentProps<'textarea'>) {
       className={cn(control, 'min-h-24 resize-y py-3 leading-relaxed', className)}
       {...props}
     />
+  )
+}
+
+export function TextAreaField({
+  label,
+  error,
+  hint,
+  className,
+  ...props
+}: FieldProps & ComponentProps<'textarea'>) {
+  const id = useId()
+  return (
+    <Field label={label} error={error} hint={hint} id={id}>
+      <TextArea
+        id={id}
+        className={className}
+        aria-invalid={error ? true : undefined}
+        aria-describedby={error ? `${id}-error` : undefined}
+        {...props}
+      />
+    </Field>
   )
 }

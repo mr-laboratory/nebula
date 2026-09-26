@@ -3,6 +3,7 @@ import { AlertTriangle, Orbit } from 'lucide-react'
 import type { ReactNode } from 'react'
 
 import { describeError } from '@/api/errors'
+import { LogoMark } from '@/components/LogoMark'
 import { Button } from '@/components/ui/button'
 import { Card, Skeleton } from '@/components/ui/misc'
 
@@ -43,7 +44,7 @@ export function PostCardSkeleton() {
 export function Splash() {
   return (
     <output className="grid min-h-dvh place-items-center bg-void" aria-label="Loading">
-      <img src="/favicon.svg" alt="" className="size-14 animate-pulse" />
+      <LogoMark className="size-14 animate-pulse" />
     </output>
   )
 }

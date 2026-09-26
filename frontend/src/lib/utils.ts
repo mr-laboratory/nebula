@@ -1,9 +1,16 @@
-// Small shared helpers: class merging, dates, safe redirects and per-post gradients.
+// Small shared helpers: class merging, list picking, dates, safe redirects, initials and plain-text previews.
 import { clsx, type ClassValue } from 'clsx'
 import { twMerge } from 'tailwind-merge'
 
 export function cn(...inputs: ClassValue[]): string {
   return twMerge(clsx(inputs))
+}
+
+/** The item at `index`, wrapping around; for constant, non-empty lists. */
+export function pick<T>(list: readonly T[], index: number): T {
+  const item = list[index % list.length]
+  if (item === undefined) throw new Error('pick() needs a non-empty list')
+  return item
 }
 
 const relative = new Intl.RelativeTimeFormat('en', { numeric: 'auto' })
@@ -41,18 +48,19 @@ export function safeNext(next: string | null | undefined): string {
   return next
 }
 
-/** A stable two-colour gradient derived from a string, used as a post's cover art. */
-export function gradientFor(seed: string): string {
-  let hash = 0
-  for (const char of seed) hash = (hash * 31 + char.charCodeAt(0)) | 0
-  const hue = Math.abs(hash) % 360
-  const second = (hue + 50 + (Math.abs(hash >> 8) % 80)) % 360
-  return `radial-gradient(120% 140% at 10% 0%, hsl(${hue} 90% 62% / 0.85), transparent 55%),
-    radial-gradient(120% 140% at 100% 100%, hsl(${second} 90% 58% / 0.75), transparent 60%),
-    linear-gradient(135deg, hsl(${hue} 60% 14%), hsl(${second} 60% 10%))`
-}
-
 export function initials(name: string): string {
   const parts = name.trim().split(/\s+/).slice(0, 2)
   return parts.map((part) => part[0]?.toUpperCase() ?? '').join('') || '?'
+}
+
+/** Markdown reduced to readable text for previews (generated excerpts come straight from it). */
+export function plainText(markdown: string): string {
+  return markdown
+    .replace(/```[^\n]*\n?/g, '') // code fence markers (the code itself stays)
+    .replace(/!\[([^\]]*)\]\([^)]*\)/g, '$1') // images → alt text
+    .replace(/\[([^\]]*)\]\([^)]*\)/g, '$1') // links → link text
+    .replace(/^\s{0,3}(#{1,6}\s+|>\s?|[-*+]\s+|\d+[.)]\s+)/gm, '') // headings, quotes, lists
+    .replace(/(\*\*|__|\*|_|~~|`)(?=\S)([^\n]*?\S)\1/g, '$2') // emphasis and inline code
+    .replace(/\s+/g, ' ')
+    .trim()
 }

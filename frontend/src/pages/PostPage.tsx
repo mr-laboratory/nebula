@@ -1,18 +1,22 @@
 // A single post: cover, metadata, sanitized Markdown body, like button and comment thread.
 import { useQuery } from '@tanstack/react-query'
-import { ArrowLeft, Clock, EyeOff, MessageCircle } from 'lucide-react'
+import { ArrowLeft, Clock, EyeOff, MessageCircle, Pencil } from 'lucide-react'
 import { motion } from 'motion/react'
 import { Link, useParams } from 'react-router'
 
 import { api, keys } from '@/api/endpoints'
 import { ApiError } from '@/api/errors'
+import { useAuth } from '@/auth/context'
+import { Cover } from '@/components/Cover'
 import { Comments } from '@/components/Comments'
 import { LikeButton } from '@/components/LikeButton'
 import { Markdown } from '@/components/Markdown'
 import { ErrorState } from '@/components/States'
+import { buttonVariants } from '@/components/ui/button-variants'
 import { Avatar, Card, Chip, Skeleton } from '@/components/ui/misc'
 import { NotFoundPage } from '@/pages/NotFoundPage'
-import { formatDate, gradientFor, readingMinutes } from '@/lib/utils'
+import { isAuthor } from '@/lib/permissions'
+import { formatDate, readingMinutes } from '@/lib/utils'
 
 function PostSkeleton() {
   return (
@@ -31,6 +35,7 @@ function PostSkeleton() {
 
 export function PostPage() {
   const { slug = '' } = useParams()
+  const { me } = useAuth()
   const query = useQuery({ queryKey: keys.post(slug), queryFn: () => api.post(slug) })
 
   if (query.isPending) return <PostSkeleton />
@@ -44,20 +49,25 @@ export function PostPage() {
   return (
     <article className="mx-auto max-w-3xl space-y-10">
       <title>{`${post.title} · Nebula`}</title>
-      <Link to="/" className="inline-flex items-center gap-1.5 text-sm text-muted hover:text-ink">
-        <ArrowLeft className="size-4" aria-hidden /> All posts
-      </Link>
+      <div className="flex items-center justify-between gap-3">
+        <Link to="/" className="inline-flex items-center gap-1.5 text-sm text-muted hover:text-ink">
+          <ArrowLeft className="size-4" aria-hidden /> All posts
+        </Link>
+        {isAuthor(me, post) && (
+          <Link to={`/edit/${post.slug}`} className={buttonVariants({ size: 'sm' })}>
+            <Pencil /> Edit
+          </Link>
+        )}
+      </div>
 
       <motion.header
         initial={{ opacity: 0, y: 12 }}
         animate={{ opacity: 1, y: 0 }}
         className="space-y-6"
       >
-        <div
-          className="h-44 rounded-3xl ring-1 ring-white/10 sm:h-56"
-          style={{ background: gradientFor(post.slug) }}
-          aria-hidden
-        />
+        <div className="h-44 overflow-hidden rounded-3xl border border-edge sm:h-56">
+          <Cover seed={post.slug} />
+        </div>
         {post.status !== 'published' && (
           <Card className="flex items-center gap-2 border-flare/40 px-4 py-3 text-sm text-flare">
             <EyeOff className="size-4" aria-hidden /> Draft: only you can see this post.
@@ -79,7 +89,7 @@ export function PostPage() {
         </h1>
         <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-muted">
           <Link
-            to={`/?author=${encodeURIComponent(post.author.username)}`}
+            to={`/u/${encodeURIComponent(post.author.username)}`}
             className="flex items-center gap-2 hover:text-ink"
           >
             <Avatar name={post.author.display_name} seed={post.author.username} />
@@ -105,7 +115,7 @@ export function PostPage() {
           </a>
         </div>
         <Link
-          to={`/?author=${encodeURIComponent(post.author.username)}`}
+          to={`/u/${encodeURIComponent(post.author.username)}`}
           className="text-sm text-plasma hover:underline"
         >
           More from {post.author.display_name} →

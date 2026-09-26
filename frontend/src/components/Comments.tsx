@@ -132,8 +132,10 @@ function CommentItem({ comment, post }: { comment: Comment; post: PostDetail }) 
         <Avatar name={author.display_name} seed={author.username} />
         <div className="min-w-0 flex-1 space-y-2">
           <p className="flex flex-wrap items-baseline gap-x-2 text-sm">
-            <span className="font-medium">{author.display_name}</span>
-            <span className="text-muted">@{author.username}</span>
+            <Link to={`/u/${encodeURIComponent(author.username)}`} className="hover:text-plasma">
+              <span className="font-medium">{author.display_name}</span>{' '}
+              <span className="text-muted">@{author.username}</span>
+            </Link>
             {author.username === post.author.username && (
               <span className="rounded-full bg-nova/15 px-1.5 text-xs text-nova">author</span>
             )}

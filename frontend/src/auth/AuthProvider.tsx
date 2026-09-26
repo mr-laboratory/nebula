@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState, type ReactNode } from 'react'
 
 import { hasSessionHint, onSessionChange, refresh, setSession } from '@/api/client'
 import { api } from '@/api/endpoints'
-import type { LoginBody, Me, RegisterBody } from '@/api/types'
+import type { LoginBody, Me, ProfileUpdate, RegisterBody } from '@/api/types'
 import { Splash } from '@/components/States'
 
 import { AuthContext, type AuthState } from './context'
@@ -62,7 +62,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         queryClient.clear()
       }
     }
-    return { signIn, signUp, signOut }
+    async function updateProfile(body: ProfileUpdate) {
+      const updated = await api.updateMe(body)
+      setMe(updated)
+      // Display names appear on posts, comments and profiles.
+      await queryClient.invalidateQueries({ queryKey: ['user', updated.username] })
+      await queryClient.invalidateQueries({ queryKey: ['posts'] })
+      await queryClient.invalidateQueries({ queryKey: ['post'] })
+      await queryClient.invalidateQueries({ queryKey: ['comments'] })
+    }
+    return { signIn, signUp, signOut, updateProfile }
   }, [queryClient])
 
   const value = useMemo<AuthState>(() => ({ me, ready, ...actions }), [me, ready, actions])

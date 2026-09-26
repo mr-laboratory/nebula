@@ -1,7 +1,7 @@
-// Helper tests: open-redirect guard, relative times, reading time and initials.
+// Helper tests: open-redirect guard, relative times, reading time, initials and plain-text previews.
 import { describe, expect, it } from 'vitest'
 
-import { initials, readingMinutes, safeNext, timeAgo } from './utils'
+import { initials, plainText, readingMinutes, safeNext, timeAgo } from './utils'
 
 describe('safeNext', () => {
   it.each(['/', '/p/hello', '/?tag=python'])('keeps same-site path %s', (path) => {
@@ -51,5 +51,21 @@ describe('initials', () => {
     ['  ', '?'],
   ])('%s → %s', (name, expected) => {
     expect(initials(name)).toBe(expected)
+  })
+})
+
+describe('plainText', () => {
+  it('strips Markdown syntax but keeps the words', () => {
+    expect(
+      plainText('# Title\n\nA **bold** and _soft_ `code` [link](https://x.y).\n\n- one\n- two'),
+    ).toBe('Title A bold and soft code link. one two')
+  })
+
+  it('keeps code but drops fences, and leaves snake_case alone', () => {
+    expect(plainText('```python\nprint(snake_case)\n```')).toBe('print(snake_case)')
+  })
+
+  it('turns images into their alt text', () => {
+    expect(plainText('![A nebula](/n.png) over > quoted')).toBe('A nebula over > quoted')
   })
 })

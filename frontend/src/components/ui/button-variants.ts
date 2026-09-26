@@ -7,9 +7,9 @@ export const buttonVariants = cva(
     variants: {
       variant: {
         primary:
-          'bg-gradient-to-r from-nova via-violet-500 to-plasma text-void shadow-glow hover:brightness-110 active:scale-[0.98]',
-        glass: 'glass text-ink hover:border-nova/50 hover:bg-white/[0.07]',
-        ghost: 'text-muted hover:bg-white/5 hover:text-ink',
+          'bg-gradient-to-r from-nova to-plasma text-void shadow-glow hover:brightness-110 active:scale-[0.98]',
+        glass: 'glass text-ink hover:border-nova/50 hover:bg-ink/[0.06]',
+        ghost: 'text-muted hover:bg-ink/5 hover:text-ink',
         danger: 'bg-danger/15 text-danger ring-1 ring-danger/30 hover:bg-danger/25',
       },
       size: {

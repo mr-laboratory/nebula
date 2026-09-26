@@ -4,8 +4,9 @@ import { motion } from 'motion/react'
 import { Link } from 'react-router'
 
 import type { PostSummary } from '@/api/types'
+import { Cover } from '@/components/Cover'
 import { Avatar } from '@/components/ui/misc'
-import { cn, formatDate, gradientFor } from '@/lib/utils'
+import { cn, formatDate, plainText } from '@/lib/utils'
 
 export function PostCard({ post, index = 0 }: { post: PostSummary; index?: number }) {
   return (
@@ -15,14 +16,14 @@ export function PostCard({ post, index = 0 }: { post: PostSummary; index?: numbe
       transition={{ duration: 0.4, delay: Math.min(index, 8) * 0.05, ease: 'easeOut' }}
       className="group relative flex flex-col overflow-hidden rounded-2xl glass transition duration-300 hover:-translate-y-1 hover:border-nova/40 hover:shadow-glow"
     >
-      <div className="relative h-28 overflow-hidden" style={{ background: gradientFor(post.slug) }}>
-        <div className="absolute inset-0 starfield opacity-50 transition duration-700 group-hover:scale-110" />
+      <div className="relative h-32 overflow-hidden border-b border-edge">
+        <Cover seed={post.slug} className="transition duration-700 group-hover:scale-105" />
         {post.tags.length > 0 && (
           <ul className="absolute bottom-3 left-4 flex flex-wrap gap-1.5">
             {post.tags.slice(0, 3).map((tag) => (
               <li
                 key={tag}
-                className="rounded-full bg-black/35 px-2 py-0.5 text-xs text-white/90 backdrop-blur"
+                className="rounded-full bg-void/70 px-2 py-0.5 text-xs text-ink backdrop-blur"
               >
                 #{tag}
               </li>
@@ -40,7 +41,7 @@ export function PostCard({ post, index = 0 }: { post: PostSummary; index?: numbe
             {post.title}
           </Link>
         </h2>
-        <p className="line-clamp-3 text-sm leading-relaxed text-muted">{post.excerpt}</p>
+        <p className="line-clamp-3 text-sm leading-relaxed text-muted">{plainText(post.excerpt)}</p>
         <footer className="mt-auto flex items-center justify-between gap-3 pt-2 text-sm">
           <span className="flex min-w-0 items-center gap-2">
             <Avatar

@@ -28,7 +28,7 @@ const components: Components = {
 
 export function Markdown({ children }: { children: string }) {
   return (
-    <div className="prose prose-lg max-w-none prose-invert prose-headings:font-display prose-a:text-plasma prose-code:rounded prose-code:bg-white/10 prose-code:px-1 prose-code:before:content-none prose-code:after:content-none prose-pre:glass prose-img:rounded-xl">
+    <div className="prose prose-lg max-w-none prose-headings:font-display prose-headings:tracking-tight prose-code:rounded prose-code:bg-ink/10 prose-code:px-1 prose-code:font-mono prose-code:before:content-none prose-code:after:content-none prose-pre:glass prose-img:rounded-xl">
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         rehypePlugins={[rehypeSanitize]}
