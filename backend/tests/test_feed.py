@@ -46,21 +46,26 @@ async def test_invalid_feed_parameters_are_rejected(
 async def test_feed_query_count_does_not_grow_with_page_size(
     client: AsyncClient, sql_statements: list[str]
 ) -> None:
-    """No N+1: authors and tags are loaded for the whole page at once."""
+    """No N+1: authors, tags, like and comment counts are loaded for the whole page at once."""
     ada = await signed_in(client, "ada")
     bob = await signed_in(client, "bob")
-    await create_post(client, ada, publish=True, tags=["a", "b"])
+    first = await create_post(client, ada, publish=True, tags=["a", "b"])
+    await client.put(f"{POSTS}/{first['id']}/like", headers=bob)
 
-    sql_statements.clear()
-    await client.get(POSTS)
-    one_post = len(sql_statements)
+    async def statements_for_feed(headers: dict[str, str] | None = None) -> int:
+        sql_statements.clear()
+        assert (await client.get(POSTS, headers=headers)).status_code == 200
+        return len(sql_statements)
+
+    anonymous, signed = await statements_for_feed(), await statements_for_feed(headers=bob)
 
     for i in range(5):
-        await create_post(client, bob if i % 2 else ada, publish=True, tags=[f"t{i}"])
-    sql_statements.clear()
-    await client.get(POSTS)
+        post = await create_post(client, bob if i % 2 else ada, publish=True, tags=[f"t{i}"])
+        await client.put(f"{POSTS}/{post['id']}/like", headers=bob if i % 2 == 0 else ada)
+        await client.post(f"{POSTS}/{post['id']}/comments", json={"body": "Hi"}, headers=bob)
 
-    assert len(sql_statements) == one_post == 3  # count, posts+authors, tags
+    assert await statements_for_feed() == anonymous == 3  # count, posts+authors+counts, tags
+    assert await statements_for_feed(headers=bob) == signed == 4  # + loading the viewer
 
 
 # ─── Filters ──────────────────────────────────────────────

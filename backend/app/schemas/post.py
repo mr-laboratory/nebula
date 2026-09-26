@@ -89,6 +89,9 @@ class PostSummary(BaseModel):
     status: PostStatus
     author: AuthorPublic
     tags: list[str]
+    like_count: int
+    comment_count: int
+    liked_by_me: bool | None = Field(description="null when signed out")
     published_at: datetime | None
     created_at: datetime
     updated_at: datetime
