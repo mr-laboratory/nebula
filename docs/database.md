@@ -19,7 +19,7 @@ erDiagram
     }
     roles {
         smallint id PK
-        varchar name UK "user | moderator"
+        varchar name UK "user | moderator | admin"
     }
     permissions {
         smallint id PK
@@ -78,6 +78,15 @@ erDiagram
         uuid post_id PK,FK
         timestamptz created_at
     }
+    audit_logs {
+        bigint id PK "identity: newest = highest"
+        uuid actor_id FK "null = command line"
+        varchar action "e.g. role.grant"
+        varchar target_type "post | comment | user"
+        uuid target_id
+        jsonb details "ids and labels only"
+        timestamptz created_at
+    }
 
     users ||--o{ posts : writes
     users ||--o{ comments : writes
@@ -92,6 +101,7 @@ erDiagram
     posts ||--o{ post_tags : ""
     tags ||--o{ post_tags : ""
     refresh_tokens |o--o| refresh_tokens : "replaced by"
+    users |o--o{ audit_logs : "acts in"
 ```
 
 ## Integrity rules enforced by the database
@@ -109,6 +119,7 @@ The API validates input too, but these rules hold even if application code has a
 | Comments are 1–5000 characters | `ck_comments_body_length` |
 | A user can like a post only once | `pk_likes` (composite key) |
 | Refresh tokens are unique and stored hashed | `uq_refresh_tokens_token_hash` |
+| The audit log is append-only: `UPDATE` and `DELETE` raise an error | trigger `audit_logs_append_only` |
 
 ## Deletion behaviour
 
@@ -117,9 +128,10 @@ flowchart LR
     U[DELETE user] -->|CASCADE| P[their posts] -->|CASCADE| X[comments · likes · post_tags on those posts]
     U -->|CASCADE| C[their comments · likes · roles · refresh tokens]
     T[refresh token deleted] -->|SET NULL| R[replaced_by_id on its predecessor]
+    A[DELETE user with audit history] -->|NO ACTION| B["refused: deactivate instead"]
 ```
 
-Posts and comments are **soft-deleted** in normal use (`deleted_at` is set), so threads keep their history and accidental deletes are recoverable. The cascade rules apply to hard deletes, such as account removal.
+Posts and comments are **soft-deleted** in normal use (`deleted_at` is set), so threads keep their history and accidental deletes are recoverable. The cascade rules apply to hard deletes, such as account removal. Accounts that performed audited actions can only be **deactivated** (`is_active = false`), so the audit trail always names a real actor.
 
 ## Indexes and query performance
 
@@ -174,7 +186,10 @@ Deep offsets still cost more than page 1: PostgreSQL has to walk past every skip
 | Status as `varchar` + CHECK, not a native `ENUM` | Adding a status is a one-line migration; native enums are awkward to alter |
 | Deterministic constraint names (naming convention) | Stable, readable migrations and clear error messages |
 | Roles and permissions seeded by the initial migration | Reference data every environment needs; demo data lives in the seed script |
-| No `created_by` / `updated_by` columns | `author_id` records ownership; moderator actions will be recorded in an audit log |
+| No `created_by` / `updated_by` columns | `author_id` records ownership; privileged actions go to `audit_logs` |
+| Audit entries written in the same transaction as the action | They commit or roll back together: no action without its entry, no entry for an action that failed |
+| Append-only enforced by a trigger, not only by code | A bug or a mistaken manual query can't rewrite history. `TRUNCATE` (used by the seed reset and tests) is not blocked |
+| Admin role in its own migration, with no moderation permissions | Least privilege: managing people and removing content are separate duties |
 | Relationships load with `lazy="raise"` | Accidental N+1 queries fail loudly in tests instead of silently slowing the app |
 | Indexes added only with evidence | Each one is justified by `EXPLAIN ANALYZE` on a 10k-post dataset and guarded by a plan test; unused indexes only slow down writes |
 | Plain `CREATE INDEX` in migrations | Fine at this size; a large live table would need `CREATE INDEX CONCURRENTLY` (outside a transaction) to avoid blocking writes |
@@ -189,6 +204,7 @@ Deep offsets still cost more than page 1: PostgreSQL has to walk past every skip
 | `make seed` | Reset and load deterministic demo data (refuses to run in production) |
 | `make seed-large` | Same, at scale: 500 users and 10,000 posts |
 | `make explain` | `EXPLAIN ANALYZE` timings and scan types for the hot queries |
+| `make grant u=… role=…` / `make revoke …` | Give or take a role, e.g. create the first admin (audited, actor `null`) |
 | `make psql` | SQL shell on the local database |
 
 Tests run against a separate `<POSTGRES_DB>_test` database. The suite migrates it once, runs each test inside a transaction that is rolled back, and verifies that models and migrations have not drifted apart (`alembic check`).

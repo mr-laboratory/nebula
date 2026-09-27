@@ -10,11 +10,12 @@ from datetime import UTC, datetime
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.errors import ForbiddenError, NotFoundError
-from app.models import Comment, Post, User
+from app.models import AuditAction, Comment, Post, User
 from app.repositories import comments as repo
 from app.schemas.comment import CommentCreate, CommentOut, CommentUpdate
 from app.schemas.common import Page, PageParams
 from app.schemas.user import AuthorPublic
+from app.services import audit
 from app.services.permissions import COMMENT_DELETE_ANY, has_permission
 from app.services.posts import get_published, get_readable
 
@@ -87,11 +88,12 @@ async def update(
 
 async def delete(session: AsyncSession, user: User, comment_id: uuid.UUID) -> None:
     comment, post = await _get_for_change(session, comment_id, user)
-    allowed = (
-        user.id in (comment.author_id, post.author_id)  # own comment, or a comment on own post
-        or await has_permission(session, user.id, COMMENT_DELETE_ANY)
-    )
-    if not allowed:
-        raise ForbiddenError("You can only delete your own comments.")
+    # Own comment, or a comment on own post. Otherwise only a moderator, and that is audited.
+    if user.id not in (comment.author_id, post.author_id):
+        if not await has_permission(session, user.id, COMMENT_DELETE_ANY):
+            raise ForbiddenError("You can only delete your own comments.")
+        audit.record(
+            session, user, AuditAction.COMMENT_DELETE, "comment", comment.id, post_id=str(post.id)
+        )
     comment.deleted_at = datetime.now(UTC)
     await session.flush()

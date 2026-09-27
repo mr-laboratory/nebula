@@ -3,7 +3,7 @@
 BACKEND := cd backend &&
 FRONTEND := cd frontend &&
 
-.PHONY: help setup env dev web test lint fmt typecheck check web-check api-types db-up db-down migrate migration seed seed-large explain psql
+.PHONY: help setup env dev web test lint fmt typecheck check web-check api-types db-up db-down migrate migration seed seed-large explain grant revoke psql
 
 help: ## Show available commands
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  \033[36m%-10s\033[0m %s\n", $$1, $$2}'
@@ -65,6 +65,14 @@ seed-large: ## Reset and fill the local DB with ~10k posts (for query tuning)
 
 explain: ## Print EXPLAIN ANALYZE timings for the hot queries (run after seed-large)
 	$(BACKEND) uv run python -m scripts.explain
+
+grant: ## Give a user a role: make grant u=alice role=admin
+	@test -n "$(u)" -a -n "$(role)" || (echo 'usage: make grant u=<username> role=<role>' && exit 1)
+	$(BACKEND) uv run python -m scripts.roles grant "$(u)" "$(role)"
+
+revoke: ## Take a role away: make revoke u=alice role=moderator
+	@test -n "$(u)" -a -n "$(role)" || (echo 'usage: make revoke u=<username> role=<role>' && exit 1)
+	$(BACKEND) uv run python -m scripts.roles revoke "$(u)" "$(role)"
 
 psql: ## Open a psql shell on the local DB
 	docker compose exec db sh -c 'psql -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"'

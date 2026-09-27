@@ -40,7 +40,7 @@ def new_post(author: User, **overrides: object) -> Post:
 async def test_reference_roles_are_seeded(db_session: AsyncSession) -> None:
     names = (await db_session.scalars(select(Role.name).order_by(Role.name))).all()
 
-    assert names == ["moderator", "user"]
+    assert names == ["admin", "moderator", "user"]
 
 
 async def test_user_defaults_are_applied_by_the_database(db_session: AsyncSession) -> None:

@@ -9,6 +9,8 @@ from app.models import Permission, role_permissions, user_roles
 
 POST_DELETE_ANY = "post:delete:any"
 COMMENT_DELETE_ANY = "comment:delete:any"
+USER_MANAGE = "user:manage"
+AUDIT_READ = "audit:read"
 
 
 async def has_permission(session: AsyncSession, user_id: uuid.UUID, code: str) -> bool:

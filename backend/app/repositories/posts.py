@@ -61,7 +61,7 @@ def _with_relations(stmt: Select[Post]) -> Select[Post]:
     return stmt.join(Post.author).options(contains_eager(Post.author), selectinload(Post.tags))
 
 
-def _escape_like(term: str) -> str:
+def escape_like(term: str) -> str:
     # %, _ and \ are wildcards in LIKE; escape them so "100%" is searched literally.
     return term.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
 
@@ -104,7 +104,7 @@ async def list_public(
     if filters.author:
         conditions.append(Post.author.has(User.username == filters.author))
     if filters.q:
-        pattern = f"%{_escape_like(filters.q)}%"
+        pattern = f"%{escape_like(filters.q)}%"
         conditions.append(
             or_(Post.title.ilike(pattern, escape="\\"), Post.excerpt.ilike(pattern, escape="\\"))
         )
