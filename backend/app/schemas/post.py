@@ -19,14 +19,16 @@ from app.schemas.common import PageParams, lowercase
 from app.schemas.user import AuthorPublic
 
 MAX_TAGS = 5
+TITLE_MAX = 200
+CONTENT_MAX = 100_000
 
 
 def _unique(tags: list[str]) -> list[str]:
     return list(dict.fromkeys(tags))  # drop duplicates, keep the author's order
 
 
-Title = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=200)]
-Content = Annotated[str, Field(min_length=1, max_length=100_000)]
+Title = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=TITLE_MAX)]
+Content = Annotated[str, Field(min_length=1, max_length=CONTENT_MAX)]
 Excerpt = Annotated[str, StringConstraints(strip_whitespace=True, max_length=300)]
 TagName = Annotated[str, BeforeValidator(lowercase), Field(pattern=r"^[a-z0-9-]{1,40}$")]
 TagList = Annotated[list[TagName], Field(max_length=MAX_TAGS), AfterValidator(_unique)]

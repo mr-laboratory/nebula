@@ -28,6 +28,11 @@ class Settings(BaseSettings):
     # Served outside the API prefix; in Docker only other containers can reach it.
     metrics_enabled: bool = True
 
+    # "Check my writing" sends draft text to LanguageTool; off removes the endpoint entirely.
+    writing_check_enabled: bool = True
+    languagetool_url: str = "https://api.languagetool.org/v2/check"
+    languagetool_timeout_seconds: float = Field(default=3.0, gt=0, le=10)
+
     jwt_secret: SecretStr = Field(min_length=32)
     access_token_expire_minutes: int = Field(default=15, ge=1, le=60)
     refresh_token_expire_days: int = Field(default=7, ge=1, le=30)

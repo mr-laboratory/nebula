@@ -12,6 +12,8 @@ A production-grade, user-specific blog platform.
 - Likes and comments from other signed-in users
 - Roles: moderators remove content, admins manage accounts; every privileged action is audited
 - Markdown editor with live preview, tags and an unsaved-changes guard
+- Import a draft from Markdown, text or Word files; export posts to Word or PDF, one at a time or all together
+- "Check writing": spelling, grammar and style suggestions powered by LanguageTool
 - Responsive UI with light, dark and system themes, and generated cover art
 - Runs as one Docker Compose stack, with health checks, Prometheus metrics and database backups
 

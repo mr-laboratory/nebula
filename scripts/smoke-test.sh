@@ -27,6 +27,11 @@ docker compose exec -T api python -c \
   | grep -q 'nebula_http_requests_total{' || fail "/metrics not served inside the network"
 ok "metrics internal only"
 
+docker compose exec -T api python -c \
+  "import weasyprint; assert weasyprint.HTML(string='<p>ok</p>').write_pdf().startswith(b'%PDF')" \
+  || fail "PDF export can't render in the API image"
+ok "PDF export renders in the API image"
+
 for service in api web; do
   [[ "$(docker compose exec -T "$service" id -u)" != 0 ]] || fail "$service runs as root"
 done

@@ -71,6 +71,10 @@ The schema is exported to [`openapi.json`](openapi.json) and the web app generat
 | `PATCH` | `/comments/{id}` | Bearer (comment author) | `200` | Edit a comment |
 | `DELETE` | `/comments/{id}` | Bearer (comment author, post author or moderator) | `204` | Delete a comment |
 | `GET` | `/tags` | — | `200` | Tags in use, most popular first |
+| `POST` | `/posts/import` | Bearer | `200` | Convert a `.md`, `.txt` or `.docx` file into a draft (nothing is saved) |
+| `GET` | `/exports/posts/{slug}` | Bearer (owner) | `200` | Download one post as `.docx` or `.pdf` |
+| `GET` | `/exports/posts` | Bearer | `200` | Download all your posts as one `.docx` or `.pdf` |
+| `POST` | `/writing/check` | Bearer | `200` | Spelling, grammar and style suggestions for a draft |
 | `GET` | `/admin/users` | Bearer (`user:manage`) | `200` | Accounts with email, status and roles |
 | `PUT` | `/admin/users/{username}/roles/{role}` | Bearer (`user:manage`) | `200` | Grant a role (idempotent) |
 | `DELETE` | `/admin/users/{username}/roles/{role}` | Bearer (`user:manage`) | `200` | Revoke a role (idempotent) |
@@ -241,6 +245,93 @@ Soft delete: the post disappears everywhere, including for its author, and its s
 
 Counts published posts only. `?limit=` 1–100, default 50.
 
+## Import, export and writing check
+
+These endpoints help authors move writing in and out of Nebula. None of them stores anything:
+an import only returns a draft for the editor, and exports are generated on request.
+
+```mermaid
+flowchart LR
+    F["File<br/>.md · .txt · .docx"] -->|"POST /posts/import"| E["Editor<br/>(unsaved draft)"]
+    E -->|"POST /writing/check"| LT["LanguageTool"]
+    E -->|"Save"| DB[(Posts)]
+    DB -->|"GET /exports/posts…"| O["Download<br/>.docx · .pdf"]
+```
+
+### `POST /posts/import`
+
+`multipart/form-data` with one field, `file`. Returns the draft for the editor to fill in:
+
+```json
+{ "title": "Quarterly outlook", "content": "Demand is **steady**…", "removed_images": 1 }
+```
+
+| File | Handling |
+|---|---|
+| `.md`, `.markdown`, `.txt` | Must be UTF-8 (a byte-order mark is fine); line endings are normalised |
+| `.docx` | Converted to Markdown: headings, bold, italics, lists, links and tables are kept |
+| Title | The first `# Heading`, or the Word document's first heading; otherwise the file name |
+| Images | Left out and counted in `removed_images`; nothing is fetched or stored |
+
+The file type is checked from its **contents**, not just its name, so a renamed file is caught.
+
+| Rejected | Status | Why |
+|---|---|---|
+| Over 1 MB, or a request body over 2 MB | `413` | Size limits |
+| `.pdf` | `415` | PDF text can't be converted reliably; the message suggests saving it as `.docx` |
+| `.docm`, or a `.docx` that contains macros | `415` | Macros are never accepted |
+| `.doc`, binary files, HTML, invalid or oversized archives | `415` | Unsupported or unsafe (archives are limited to 1 000 entries and 20 MB unpacked) |
+| No text, or longer than a post can be | `422` | — |
+
+### `GET /exports/posts/{slug}` · `GET /exports/posts`
+
+`?format=docx` or `?format=pdf` (required). The response is a file download:
+
+```
+Content-Type: application/pdf
+Content-Disposition: attachment; filename="nebula-reading-a-cloud-bill.pdf"
+Cache-Control: no-store
+```
+
+- **One post** (`/exports/posts/{slug}`): your own posts only, drafts included. Anyone else's post, even a published one, is `404`.
+- **All posts** (`/exports/posts`): up to 500 of your posts, oldest first, under the heading "Posts by {name}" with a contents list; each post starts on a new page. The file is named `nebula-posts-{username}-{YYYYMMDD}`. `404` if you have no posts yet.
+- Word exports use real Word styles (headings, lists, code), so the document stays editable.
+- Exports never load anything from the internet: images become `[Image: alt text]`, and only `http`, `https` and `mailto` links are kept.
+- If an export takes longer than 25 seconds, or PDF rendering isn't available on the server, the API returns `503` with a message saying so.
+
+### `POST /writing/check`
+
+```json
+{ "text": "## Heading\n\nTeh market is steady.", "language": "auto" }
+```
+
+```json
+{
+  "language": { "code": "en-US", "name": "English (US)" },
+  "issues": [
+    {
+      "offset": 12,
+      "length": 3,
+      "message": "Possible spelling mistake found.",
+      "category": "spelling",
+      "suggestions": ["The", "Ten", "Tea", "Tech", "Ted"]
+    }
+  ]
+}
+```
+
+| Field | Rules |
+|---|---|
+| `text` | Markdown, up to 20 000 bytes |
+| `language` | `auto` (default) or a code such as `en-US` |
+| `offset`, `length` | Position in `text`, in UTF-16 code units, so JavaScript can use them directly |
+| `category` | `spelling`, `grammar`, `style`, `punctuation` or `other` |
+| `suggestions` | Up to 5 |
+
+The text is checked by the public [LanguageTool](https://languagetool.org) API. Markdown syntax, code, URLs and HTML are marked as markup, so only the prose is checked, and suggestions that touch markup are dropped. Nebula doesn't store or log the text.
+
+If LanguageTool is busy or unreachable the API returns `503`, with `Retry-After` when it's busy. `WRITING_CHECK_ENABLED=false` removes the endpoint, so no draft text ever leaves the server.
+
 ## Likes
 
 ### `PUT /posts/{id}/like` · `DELETE /posts/{id}/like`
@@ -388,9 +479,12 @@ Filters: `?action=`, `?actor=<username>`, `?target_id=`, plus `limit` / `offset`
 | `403` | Signed in but not allowed | — |
 | `404` | Not found, or not visible to you | — |
 | `409` | Conflicts with existing data | — |
+| `413` | Upload or request body too large | — |
+| `415` | File type not accepted | `detail` says what to do instead |
 | `422` | Validation failed | `errors: [{loc, msg, type}]`; submitted values are **never echoed** |
 | `429` | Rate limit exceeded | `Retry-After: <seconds>` |
 | `500` | Unexpected failure | Generic message and `request_id` only |
+| `503` | A dependency is unavailable (readiness, PDF rendering, LanguageTool) | `detail` names the feature; `Retry-After` when known |
 
 ## Rate limits
 
@@ -404,5 +498,8 @@ Fixed windows, counted in Redis. Emails and user IDs are hashed before use as ke
 | `POST /posts/{id}/comments` | 10 / minute per user |
 | `PATCH /comments/{id}` | 30 / minute per user |
 | `PUT`/`DELETE /posts/{id}/like` | 60 / minute per user |
+| `POST /posts/import` | 20 / hour per user |
+| `GET /exports/…` | 10 / hour per user (both endpoints share the limit) |
+| `POST /writing/check` | 10 / minute per user **and** 15 / minute for the whole server (the free LanguageTool API allows about 20) |
 
 If Redis is unavailable the limiter **fails open** (requests are allowed and a warning is logged). This keeps sign-in available during a cache outage, and Argon2 hashing still makes brute force slow.

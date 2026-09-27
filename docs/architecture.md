@@ -12,6 +12,7 @@ flowchart LR
     API --> RD[("<b>Redis</b><br/>rate limits, cache")]
     API --> FS[/"<b>Local storage</b><br/>cover images"/]
     API -.->|optional| UN["<b>Unsplash</b><br/>→ Picsum fallback"]
+    API -.->|optional| LT["<b>LanguageTool</b><br/>writing check"]
 ```
 
 The API is **stateless**: session state lives in PostgreSQL and Redis, so instances can scale horizontally.
@@ -218,7 +219,34 @@ Account changes take a row lock, so two admins demoting each other at the same m
 
 The first admin is created with `make grant u=… role=admin`. Running it needs database access, which is already the highest level of trust.
 
-## 5. Frontend
+### 4.7 Import, export and writing check
+
+Three tools for the author, all signed-in only and none of them storing anything new.
+
+```mermaid
+sequenceDiagram
+    participant E as Editor
+    participant API as FastAPI
+    participant LT as LanguageTool
+    participant DB as PostgreSQL
+    E->>API: POST /posts/import (multipart, ≤ 1 MB)
+    Note over API: sniff real type · reject PDF, macros, archives too large<br/>.docx → Markdown · drop images (count them)
+    API-->>E: { title, content, removed_images }, not saved
+    E->>API: POST /writing/check { text }
+    Note over API: Markdown syntax, code and URLs marked as markup
+    API->>LT: annotated text (3 s timeout, 1 retry)
+    LT-->>API: matches
+    API-->>E: issues with UTF-16 offsets into the Markdown
+    E->>API: GET /exports/posts?format=pdf
+    API->>DB: the author's posts (≤ 500, oldest first)
+    Note over API: render in a worker thread (25 s limit)<br/>no network fetches, safe links only
+    API-->>E: attachment · Cache-Control: no-store
+```
+
+- **Import** reads the file in memory and returns a draft. The author reviews it in the editor, and nothing is written until they save.
+- **Export** builds one neutral document model from the posts, then renders it with `python-docx` (Word) or WeasyPrint (PDF). Images are never fetched, so an export can't be used to make the server call out.
+- **Writing check** is a thin proxy to the public LanguageTool API. Limits on both the user and the whole server keep Nebula inside the free tier, and `WRITING_CHECK_ENABLED=false` removes the route.
+
 
 A single-page app. In development Vite serves it on :5173 and proxies `/api` to the API, so the browser sees a single origin: the refresh cookie works as-is and no CORS preflights are needed.
 
@@ -234,6 +262,8 @@ flowchart TB
     C -->|"/api/v1"| API[(FastAPI)]
     T["<b>api/schema.d.ts</b><br/>generated from openapi.json"] -.-> C
 ```
+
+The editor adds three tools above the Write/Preview tabs: **Import file**, **Check writing** (a panel of suggestions that can be applied or ignored, and that marks itself stale when the text changes) and a **Replace this draft?** confirmation. The dashboard has an **Export** menu on each post and an **Export all** button; downloads are saved through a temporary object URL.
 
 Only the feed ships in the first bundle. The other pages are lazy routes, so the Markdown pipeline (post page and editor) loads only when a reader opens a post.
 
@@ -306,7 +336,7 @@ flowchart TB
         B2["CORS allow-list · security headers · rate-limited auth"]
     end
     subgraph App["Application"]
-        B3["Ownership & permission checks · drafts → 404 · audit log<br/>Whitelisted schemas · email private · generic login errors"]
+        B3["Ownership & permission checks · drafts → 404 · audit log<br/>Whitelisted schemas · email private · generic login errors<br/>Upload limits · type sniffing · no macros · exports never fetch URLs"]
     end
     subgraph Data
         B4["Argon2id passwords · hashed refresh tokens<br/>Secrets from env · redacted logs"]
@@ -404,3 +434,4 @@ flowchart LR
 | Indexes · query optimization · HTTP caching and compression | ✅ Done (v0.7.0) |
 | Roles (user / moderator / admin) · account management · audit log | ✅ Done (v0.8.0) |
 | Docker full stack · metrics · backups | ✅ Done (v0.9.0) |
+| Import (.md, .txt, .docx) · export (Word, PDF) · writing check | ✅ Done (v0.10.0) |

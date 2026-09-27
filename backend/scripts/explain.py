@@ -77,7 +77,7 @@ async def run(session: AsyncSession) -> None:
             select(Post).where(Post.status == PostStatus.PUBLISHED).order_by(Post.slug).limit(1)
         )
     ).scalar_one()
-    word = post.title.split()[1].lower()
+    word = post.title.split()[1].lower().strip(",.:;!?'\"()")  # a real word from a real title
     counts = await session.execute(
         text(
             "SELECT (SELECT count(*) FROM posts), (SELECT count(*) FROM likes), "

@@ -1,4 +1,4 @@
-// The signed-in author's posts: drafts and published, with publish, unpublish and delete.
+// The signed-in author's posts: drafts and published, with publish, unpublish, delete and export.
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   ChevronLeft,
@@ -20,6 +20,7 @@ import { api, keys } from '@/api/endpoints'
 import { describeError } from '@/api/errors'
 import type { PostStatus, PostSummary } from '@/api/types'
 import { useAuth } from '@/auth/context'
+import { ExportMenu } from '@/components/ExportMenu'
 import { EmptyState, ErrorState } from '@/components/States'
 import { Button } from '@/components/ui/button'
 import { buttonVariants } from '@/components/ui/button-variants'
@@ -124,6 +125,11 @@ function PostRow({ post }: { post: PostSummary }) {
             >
               <Eye /> {published ? 'View' : 'Preview'}
             </Link>
+            <ExportMenu
+              label="Export"
+              ariaLabel={`Export “${post.title}”`}
+              run={(format) => api.exportPost(post.slug, format)}
+            />
             <Button
               size="sm"
               variant="ghost"
@@ -191,9 +197,14 @@ export function DashboardPage() {
             )}
           </p>
         </div>
-        <Link to="/write" className={buttonVariants({ variant: 'primary' })}>
-          <PenLine /> New post
-        </Link>
+        <div className="flex items-center gap-2">
+          {posts.data && posts.data.total > 0 && (
+            <ExportMenu label="Export all" size="md" run={(format) => api.exportAll(format)} />
+          )}
+          <Link to="/write" className={buttonVariants({ variant: 'primary' })}>
+            <PenLine /> New post
+          </Link>
+        </div>
       </header>
 
       <nav className="flex w-fit gap-1 rounded-xl p-1 glass" aria-label="Filter by status">

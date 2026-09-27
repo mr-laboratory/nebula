@@ -93,6 +93,7 @@ async def app(migrated_db: None, settings: Settings) -> AsyncIterator[FastAPI]:
     # httpx's ASGITransport does not run the lifespan, so close clients here.
     await application.state.db.dispose()
     await application.state.redis.aclose()
+    await application.state.http.aclose()
 
 
 @pytest.fixture

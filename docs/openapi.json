@@ -134,6 +134,21 @@
         "title": "AuthorPublic",
         "type": "object"
       },
+      "Body_import_post_api_v1_posts_import_post": {
+        "properties": {
+          "file": {
+            "contentMediaType": "application/octet-stream",
+            "description": ".md, .markdown, .txt or .docx, up to 1 MB",
+            "title": "File",
+            "type": "string"
+          }
+        },
+        "required": [
+          "file"
+        ],
+        "title": "Body_import_post_api_v1_posts_import_post",
+        "type": "object"
+      },
       "CommentCreate": {
         "additionalProperties": false,
         "properties": {
@@ -221,6 +236,14 @@
         "title": "CommentUpdate",
         "type": "object"
       },
+      "ExportFormat": {
+        "enum": [
+          "docx",
+          "pdf"
+        ],
+        "title": "ExportFormat",
+        "type": "string"
+      },
       "HTTPValidationError": {
         "properties": {
           "detail": {
@@ -246,6 +269,31 @@
           "status"
         ],
         "title": "HealthStatus",
+        "type": "object"
+      },
+      "ImportedPost": {
+        "properties": {
+          "content": {
+            "description": "Markdown",
+            "title": "Content",
+            "type": "string"
+          },
+          "removed_images": {
+            "description": "Images in the file that were not imported",
+            "title": "Removed Images",
+            "type": "integer"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "title",
+          "content",
+          "removed_images"
+        ],
+        "title": "ImportedPost",
         "type": "object"
       },
       "LikeStatus": {
@@ -1004,6 +1052,114 @@
         ],
         "title": "ValidationError",
         "type": "object"
+      },
+      "WritingCheck": {
+        "properties": {
+          "issues": {
+            "items": {
+              "$ref": "#/components/schemas/WritingIssue"
+            },
+            "title": "Issues",
+            "type": "array"
+          },
+          "language": {
+            "$ref": "#/components/schemas/WritingLanguage"
+          }
+        },
+        "required": [
+          "language",
+          "issues"
+        ],
+        "title": "WritingCheck",
+        "type": "object"
+      },
+      "WritingCheckRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "language": {
+            "default": "auto",
+            "description": "`auto` to detect, or a code such as `en-US`",
+            "pattern": "^(auto|[a-z]{2,3}(-[A-Z]{2})?)$",
+            "title": "Language",
+            "type": "string"
+          },
+          "text": {
+            "description": "Markdown",
+            "maxLength": 20000,
+            "minLength": 1,
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "text"
+        ],
+        "title": "WritingCheckRequest",
+        "type": "object"
+      },
+      "WritingIssue": {
+        "properties": {
+          "category": {
+            "enum": [
+              "spelling",
+              "grammar",
+              "style",
+              "punctuation",
+              "other"
+            ],
+            "title": "Category",
+            "type": "string"
+          },
+          "length": {
+            "minimum": 0.0,
+            "title": "Length",
+            "type": "integer"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "offset": {
+            "description": "Start, in UTF-16 code units (as in JavaScript)",
+            "minimum": 0.0,
+            "title": "Offset",
+            "type": "integer"
+          },
+          "suggestions": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Suggestions",
+            "type": "array"
+          }
+        },
+        "required": [
+          "offset",
+          "length",
+          "message",
+          "category",
+          "suggestions"
+        ],
+        "title": "WritingIssue",
+        "type": "object"
+      },
+      "WritingLanguage": {
+        "properties": {
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "name"
+        ],
+        "title": "WritingLanguage",
+        "type": "object"
       }
     },
     "securitySchemes": {
@@ -1016,7 +1172,7 @@
   },
   "info": {
     "title": "Nebula API",
-    "version": "0.9.0"
+    "version": "0.10.0"
   },
   "openapi": "3.1.0",
   "paths": {
@@ -1692,6 +1848,104 @@
         ]
       }
     },
+    "/api/v1/exports/posts": {
+      "get": {
+        "description": "A cover page and contents list, then each post on a new page. Deleted posts are left out.",
+        "operationId": "export_my_posts_api_v1_exports_posts_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "format",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/ExportFormat"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/pdf": {},
+              "application/vnd.openxmlformats-officedocument.wordprocessingml.document": {}
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Download all my posts (drafts included) as one document",
+        "tags": [
+          "exports"
+        ]
+      }
+    },
+    "/api/v1/exports/posts/{slug}": {
+      "get": {
+        "description": "Only the author can export a post; anyone else gets 404.",
+        "operationId": "export_my_post_api_v1_exports_posts__slug__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "maxLength": 220,
+              "title": "Slug",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "format",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/ExportFormat"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/pdf": {},
+              "application/vnd.openxmlformats-officedocument.wordprocessingml.document": {}
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Download one of my posts",
+        "tags": [
+          "exports"
+        ]
+      }
+    },
     "/api/v1/health/live": {
       "get": {
         "description": "The process is up and able to serve requests.",
@@ -1916,6 +2170,53 @@
           }
         ],
         "summary": "Create a draft",
+        "tags": [
+          "posts"
+        ]
+      }
+    },
+    "/api/v1/posts/import": {
+      "post": {
+        "description": "Returns a title and Markdown body for the editor. Images in .docx files are dropped.",
+        "operationId": "import_post_api_v1_posts_import_post",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_import_post_api_v1_posts_import_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImportedPost"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Convert a file into a draft (nothing is saved)",
         "tags": [
           "posts"
         ]
@@ -2622,6 +2923,53 @@
         "summary": "Public author profile",
         "tags": [
           "users"
+        ]
+      }
+    },
+    "/api/v1/writing/check": {
+      "post": {
+        "description": "The text goes to LanguageTool's public API and is not stored or logged by Nebula.",
+        "operationId": "check_writing_api_v1_writing_check_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WritingCheckRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WritingCheck"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Spelling, grammar and style suggestions for a draft",
+        "tags": [
+          "writing"
         ]
       }
     }

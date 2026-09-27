@@ -13,7 +13,14 @@ const BASE = '/api/v1'
 const SESSION_HINT = 'nebula:has-session' // "a refresh cookie probably exists"; not a secret
 
 type Query = Record<string, string | number | undefined>
-type Options = { method?: string; body?: unknown; query?: Query; signal?: AbortSignal }
+type Options = {
+  method?: string
+  body?: unknown // JSON, or FormData for a file upload
+  query?: Query
+  signal?: AbortSignal
+  accept?: string
+}
+export type Download = { blob: Blob; filename: string }
 
 let accessToken: string | null = null
 let refreshing: Promise<string | null> | null = null
@@ -54,13 +61,18 @@ function url(path: string, query?: Query): string {
 }
 
 async function send(path: string, options: Options, token: string | null): Promise<Response> {
-  const headers: Record<string, string> = { Accept: 'application/json' }
-  if (options.body !== undefined) headers['Content-Type'] = 'application/json'
+  const upload = options.body instanceof FormData
+  const headers: Record<string, string> = { Accept: options.accept ?? 'application/json' }
+  // A FormData body gets its multipart Content-Type (with the boundary) from the browser.
+  if (options.body !== undefined && !upload) headers['Content-Type'] = 'application/json'
   if (token) headers.Authorization = `Bearer ${token}`
+  let body: BodyInit | undefined
+  if (upload) body = options.body as FormData
+  else if (options.body !== undefined) body = JSON.stringify(options.body)
   return fetch(url(path, options.query), {
     method: options.method ?? 'GET',
     headers,
-    body: options.body === undefined ? undefined : JSON.stringify(options.body),
+    body,
     credentials: 'same-origin',
     signal: options.signal,
   })
@@ -93,8 +105,7 @@ export function refresh(): Promise<string | null> {
   return refreshing
 }
 
-/** Call the API. Throws ApiError for non-2xx responses; returns undefined for 204. */
-export async function request<T>(path: string, options: Options = {}): Promise<T> {
+async function sendAuthorized(path: string, options: Options): Promise<Response> {
   const token = accessToken
   let response = await send(path, options, token)
 
@@ -105,6 +116,26 @@ export async function request<T>(path: string, options: Options = {}): Promise<T
   }
 
   if (!response.ok) throw await toApiError(response)
+  return response
+}
+
+/** Call the API. Throws ApiError for non-2xx responses; returns undefined for 204. */
+export async function request<T>(path: string, options: Options = {}): Promise<T> {
+  const response = await sendAuthorized(path, options)
   if (response.status === 204) return undefined as T
   return (await response.json()) as T
+}
+
+/** The file name from `Content-Disposition: attachment; filename="..."`, or the fallback. */
+export function filenameFrom(header: string | null, fallback: string): string {
+  const name = header?.match(/filename="([^"]+)"/)?.[1]
+  // Never trust a path from a header: keep the last segment only.
+  return name?.split(/[\\/]/).pop() || fallback
+}
+
+/** Fetch a file the API generates (errors still arrive as problem+json). */
+export async function download(path: string, query: Query, fallback: string): Promise<Download> {
+  const response = await sendAuthorized(path, { query, accept: '*/*' })
+  const filename = filenameFrom(response.headers.get('Content-Disposition'), fallback)
+  return { blob: await response.blob(), filename }
 }

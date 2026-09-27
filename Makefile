@@ -2,6 +2,11 @@
 .DEFAULT_GOAL := help
 BACKEND := cd backend &&
 FRONTEND := cd frontend &&
+# PDF export (WeasyPrint) loads Pango from Homebrew on macOS. Set inline on each command:
+# macOS drops DYLD_* variables when it starts /bin/sh, so an `export` wouldn't survive.
+ifeq ($(shell uname -s),Darwin)
+PANGO := DYLD_FALLBACK_LIBRARY_PATH="$(shell brew --prefix 2>/dev/null || echo /opt/homebrew)/lib"
+endif
 
 .PHONY: help setup env dev web up down logs smoke test lint fmt typecheck check web-check api-types db-up db-down migrate migration seed seed-large explain grant revoke psql backup restore
 
@@ -17,7 +22,7 @@ env: ## Create .env with random secrets (if missing)
 	@scripts/init-env.sh
 
 dev: ## Run the API with auto-reload on :8000
-	$(BACKEND) uv run uvicorn app.main:create_app --factory --reload --port 8000 --no-server-header
+	$(BACKEND) $(PANGO) uv run python -m uvicorn app.main:create_app --factory --reload --port 8000 --no-server-header
 
 web: ## Run the web app with hot reload on :5173 (proxies /api to :8000)
 	$(FRONTEND) npm run dev
@@ -37,7 +42,7 @@ logs: ## Follow the API and web logs (Ctrl-C to stop)
 	docker compose --profile app logs -f api web
 
 test: ## Run tests
-	$(BACKEND) uv run pytest
+	$(BACKEND) $(PANGO) uv run python -m pytest
 
 lint: ## Lint and check formatting
 	$(BACKEND) uv run ruff check . && uv run ruff format --check .

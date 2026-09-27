@@ -21,6 +21,13 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 
 # ─── Runtime: no uv, no compilers, no dev tools ─────────────────────────────────
 FROM python:${PYTHON_VERSION}-slim AS runtime
+# Pango and HarfBuzz for PDF export (WeasyPrint), plus one font family to render with. The font
+# cache is built here; the root filesystem is read-only at run time, so XDG_CACHE_HOME is /tmp.
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends \
+      libpango-1.0-0 libpangoft2-1.0-0 libharfbuzz-subset0 fonts-dejavu-core \
+ && fc-cache --force \
+ && rm -rf /var/lib/apt/lists/*
 RUN groupadd --system --gid 10001 nebula \
  && useradd --system --uid 10001 --gid nebula --no-create-home --shell /usr/sbin/nologin nebula
 COPY --from=build /opt/venv /opt/venv
@@ -32,6 +39,7 @@ COPY app ./app
 ENV PATH=/opt/venv/bin:$PATH \
     PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
+    XDG_CACHE_HOME=/tmp/.cache \
     APP_ENV=production
 USER nebula
 EXPOSE 8000

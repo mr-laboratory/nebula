@@ -157,3 +157,47 @@ describe('session hint', () => {
     expect(client.hasSessionHint()).toBe(false)
   })
 })
+
+describe('download', () => {
+  it('returns the file with the name from Content-Disposition', async () => {
+    client.setSession('token-a')
+    fetchMock.mockResolvedValueOnce(
+      new Response('PDF', {
+        headers: { 'Content-Disposition': 'attachment; filename="nebula-post.pdf"' },
+      }),
+    )
+
+    const file = await client.download('/exports/posts/post', { format: 'pdf' }, 'fallback.pdf')
+
+    expect(file.filename).toBe('nebula-post.pdf')
+    expect(await file.blob.text()).toBe('PDF')
+    expect(calls()).toEqual(['/api/v1/exports/posts/post?format=pdf'])
+    expect(authHeader(0)).toBe('Bearer token-a')
+  })
+
+  it('keeps only the last path segment of a file name', () => {
+    expect(client.filenameFrom('attachment; filename="../../x.pdf"', 'f.pdf')).toBe('x.pdf')
+    expect(client.filenameFrom(null, 'f.pdf')).toBe('f.pdf')
+  })
+
+  it('throws problem details for failed downloads', async () => {
+    client.setSession('token-a')
+    fetchMock.mockResolvedValueOnce(json(404, { detail: 'You have no posts to export yet.' }))
+
+    await expect(client.download('/exports/posts', {}, 'f.pdf')).rejects.toBeInstanceOf(ApiError)
+  })
+})
+
+describe('uploads', () => {
+  it('lets the browser set the multipart Content-Type', async () => {
+    fetchMock.mockResolvedValueOnce(json(200, { ok: true }))
+    const form = new FormData()
+    form.append('file', new File(['# Hi'], 'a.md'))
+
+    await client.request('/posts/import', { method: 'POST', body: form })
+
+    const init = fetchMock.mock.calls[0]?.[1] as RequestInit
+    expect(init.body).toBe(form)
+    expect((init.headers as Record<string, string>)['Content-Type']).toBeUndefined()
+  })
+})

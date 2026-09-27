@@ -20,6 +20,10 @@ export type LoginBody = Schemas['LoginRequest']
 export type TokenResponse = Schemas['TokenResponse']
 export type PostPage = Schemas['Page_PostSummary_']
 export type CommentPage = Schemas['Page_CommentOut_']
+export type ImportedPost = Schemas['ImportedPost']
+export type ExportFormat = Schemas['ExportFormat']
+export type WritingCheck = Schemas['WritingCheck']
+export type WritingIssue = Schemas['WritingIssue']
 
 export type FeedFilters = {
   tag?: string
