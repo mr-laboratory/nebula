@@ -1,6 +1,6 @@
-"""FastAPI dependencies: DB session (unit of work), Redis, settings and the current user."""
+"""FastAPI dependencies: DB session (unit of work), Redis, settings, current user, permissions."""
 
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Awaitable, Callable
 from typing import Annotated, cast
 
 from fastapi import Depends, Request
@@ -8,10 +8,11 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from redis.asyncio import Redis
 
 from app.core.config import Settings
-from app.core.errors import UnauthorizedError
+from app.core.errors import ForbiddenError, UnauthorizedError
 from app.core.security import decode_access_token
 from app.db.session import AsyncSession, Database
 from app.models import User
+from app.services.permissions import has_permission
 
 
 async def get_session(request: Request) -> AsyncIterator[AsyncSession]:
@@ -64,3 +65,18 @@ async def get_current_user(user: Annotated[User | None, Depends(get_optional_use
 
 CurrentUser = Annotated[User, Depends(get_current_user)]
 OptionalUser = Annotated[User | None, Depends(get_optional_user)]
+
+
+def require_permission(code: str) -> Callable[..., Awaitable[User]]:
+    """A dependency that returns the signed-in user if one of their roles grants `code`.
+
+    Usage: `admin: Annotated[User, Depends(require_permission(USER_MANAGE))]`.
+    Anonymous requests get 401, signed-in users without the permission 403.
+    """
+
+    async def guard(user: CurrentUser, session: SessionDep) -> User:
+        if not await has_permission(session, user.id, code):
+            raise ForbiddenError()
+        return user
+
+    return guard

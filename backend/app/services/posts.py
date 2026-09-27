@@ -12,7 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.errors import ConflictError, ForbiddenError, NotFoundError
 from app.core.slugs import slugify, with_suffix
-from app.models import Post, PostStatus, User
+from app.models import AuditAction, Post, PostStatus, User
 from app.repositories import posts as repo
 from app.repositories import tags as tag_repo
 from app.repositories.posts import PREVIEW_LENGTH, PostRow, PostStats
@@ -26,6 +26,7 @@ from app.schemas.post import (
     PostUpdate,
 )
 from app.schemas.user import AuthorPublic
+from app.services import audit
 from app.services.permissions import POST_DELETE_ANY, has_permission
 
 POST_NOT_FOUND = "Post not found."
@@ -236,4 +237,6 @@ async def delete(session: AsyncSession, user: User, post_id: uuid.UUID) -> None:
     """Soft delete: the row stays (for moderation and undo later) but disappears everywhere."""
     post = await _get_for_change(session, post_id, user, override=POST_DELETE_ANY)
     post.deleted_at = datetime.now(UTC)
+    if post.author_id != user.id:  # removed by a moderator: audited
+        audit.record(session, user, AuditAction.POST_DELETE, "post", post.id)
     await session.flush()

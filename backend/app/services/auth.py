@@ -140,3 +140,12 @@ async def _revoke_family(session: AsyncSession, family_id: uuid.UUID) -> None:
         .where(RefreshToken.family_id == family_id, RefreshToken.revoked_at.is_(None))
         .values(revoked_at=func.now())
     )
+
+
+async def revoke_all_sessions(session: AsyncSession, user_id: uuid.UUID) -> None:
+    """Sign the user out everywhere: every unrevoked refresh token is revoked."""
+    await session.execute(
+        update(RefreshToken)
+        .where(RefreshToken.user_id == user_id, RefreshToken.revoked_at.is_(None))
+        .values(revoked_at=func.now())
+    )
