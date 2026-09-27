@@ -10,7 +10,7 @@ COPY . .
 RUN npm run build
 
 # ─── Runtime: static files and nginx only, running as a non-root user ───────
-FROM nginxinc/nginx-unprivileged:1.29-alpine AS runtime
+FROM nginxinc/nginx-unprivileged:1.31-alpine AS runtime
 COPY docker/nginx.conf /etc/nginx/conf.d/default.conf
 COPY docker/security-headers.conf /etc/nginx/snippets/security-headers.conf
 COPY --from=build /src/dist /usr/share/nginx/html
