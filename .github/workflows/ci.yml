@@ -1,4 +1,5 @@
-# CI: lint, type-check and test the backend (against real Postgres + Redis) and the web app, and scan history for secrets.
+# CI: lint, type-check and test the backend (against real Postgres + Redis) and the web app,
+# build the Docker images and smoke-test the full stack, and scan history for secrets.
 name: CI
 
 on:
@@ -89,6 +90,27 @@ jobs:
           git diff --exit-code -- src/api/schema.d.ts || (echo "Run 'make api-types' and commit the result." && exit 1)
       - name: Lint · format · types · tests · build
         run: npm run check
+
+  docker:
+    name: Docker (build · full-stack smoke test)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Create .env with throwaway secrets
+        run: scripts/init-env.sh
+      - name: Build images and start the stack
+        run: docker compose --profile app up -d --build --wait --wait-timeout 180
+      - name: Smoke test
+        run: scripts/smoke-test.sh
+      - name: Container logs
+        if: failure()
+        run: docker compose --profile app logs --no-color
+      - name: Tear down
+        if: always()
+        run: docker compose --profile app down --volumes
 
   secrets:
     name: Secret scan

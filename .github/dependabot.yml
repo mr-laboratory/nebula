@@ -1,4 +1,4 @@
-# Dependabot: weekly update PRs for Python and npm dependencies and GitHub Actions.
+# Dependabot: weekly update PRs for Python and npm dependencies, Docker base images and GitHub Actions.
 #
 # Minor and patch updates are grouped into one PR per ecosystem. Major updates come as
 # separate PRs, so one breaking release can't hold back the safe ones.
@@ -25,6 +25,26 @@ updates:
         update-types: [version-update:semver-major]
       # Held back until the tools that depend on it support it (openapi-typescript needs ^5).
       - dependency-name: typescript
+        update-types: [version-update:semver-major]
+
+  - package-ecosystem: docker
+    directories: [/backend, /frontend]
+    schedule:
+      interval: weekly
+    ignore:
+      # Base images track the runtimes we develop on (Python 3.13, Node 24).
+      - dependency-name: python
+        update-types: [version-update:semver-major, version-update:semver-minor]
+      - dependency-name: node
+        update-types: [version-update:semver-major]
+
+  - package-ecosystem: docker-compose
+    directory: /
+    schedule:
+      interval: weekly
+    ignore:
+      # Major Postgres upgrades need a dump and restore, so they're done deliberately.
+      - dependency-name: postgres
         update-types: [version-update:semver-major]
 
   - package-ecosystem: github-actions
