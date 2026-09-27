@@ -135,7 +135,7 @@ Posts and comments are **soft-deleted** in normal use (`deleted_at` is set), so 
 
 ## Indexes and query performance
 
-Indexes were chosen from measurements, not guesses: `make seed-large` loads 10,000 posts (500 authors, 100k likes, 16k comments), and `make explain` runs every hot read path through the real repository code and reports `EXPLAIN ANALYZE` for the SQL it sends.
+Indexes were chosen from measurements, not guesses: `make seed-large` loads about 10,000 posts (500 authors, ~123k likes, ~15k comments), and `make explain` runs every hot read path through the real repository code and reports `EXPLAIN ANALYZE` for the SQL it sends.
 
 ```mermaid
 flowchart LR
@@ -201,8 +201,8 @@ Deep offsets still cost more than page 1: PostgreSQL has to walk past every skip
 | `make db-up` / `make db-down` | Start / stop Postgres and Redis (data persists in a Docker volume) |
 | `make migrate` | Apply pending migrations |
 | `make migration m="add x"` | Autogenerate a migration from model changes; **always review it** |
-| `make seed` | Reset and load deterministic demo data (refuses to run in production) |
-| `make seed-large` | Same, at scale: 500 users and 10,000 posts |
+| `make seed` | Reset and load deterministic demo data: fictional authors writing realistic technology and market posts (refuses to run in production) |
+| `make seed-large` | Same, at scale: 500 users and about 10,000 posts |
 | `make explain` | `EXPLAIN ANALYZE` timings and scan types for the hot queries |
 | `make grant u=… role=…` / `make revoke …` | Give or take a role, e.g. create the first admin (audited, actor `null`) |
 | `make psql` | SQL shell on the local database |
