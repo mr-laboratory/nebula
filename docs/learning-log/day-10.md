@@ -10,7 +10,7 @@
 - PDF libraries (Pango, HarfBuzz, DejaVu fonts) in the API image and in CI, plus a smoke-test check that the image can render a PDF;
 - new demo content: fictional authors writing realistic technology and market posts.
 
-That adds 36 new backend tests (226 in total) and new frontend tests (71 in total).
+That adds 38 new backend tests (228 in total) and new frontend tests (71 in total).
 
 ```mermaid
 flowchart LR
@@ -84,4 +84,5 @@ flowchart LR
 - Offset units are easy to get wrong: Python counts code points, JavaScript and LanguageTool count UTF-16 units. A test with an emoji (outside the Basic Multilingual Plane) pins that down.
 - A route switched off by a flag is best tested through `app.openapi()`: if the path isn't in the schema, it isn't served.
 - markdown-it's link validation already blocks `javascript:`, but checking the generated HTML in a test made that a guarantee instead of an assumption.
+- CodeQL flagged two regular expressions in the Markdown masking as ReDoS risks. Measured, a 20 KB line of `](` repeated took 2.6 s, on the event loop, blocking every other request. Making each pattern stop at the next opening character brought it to 0.03 s, and a test with hostile input keeps it there.
 - The query-plan probe searched for a word with a trailing comma, which made the search skip the trigram index. Stripping punctuation made the measurement honest again.
