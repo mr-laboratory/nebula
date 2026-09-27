@@ -1,8 +1,9 @@
 // One typed function per API endpoint used by the UI.
-import { request } from './client'
+import { download, request } from './client'
 import type {
   Comment,
   CommentPage,
+  ExportFormat,
   FeedFilters,
   LikeStatus,
   LoginBody,
@@ -13,11 +14,19 @@ import type {
   PostPage,
   PostUpdate,
   Profile,
+  ImportedPost,
   ProfileUpdate,
   RegisterBody,
   TagCount,
   TokenResponse,
+  WritingCheck,
 } from './types'
+
+function upload(file: File): FormData {
+  const form = new FormData()
+  form.append('file', file)
+  return form
+}
 
 export const api = {
   register: (body: RegisterBody) => request<Me>('/auth/register', { method: 'POST', body }),
@@ -37,6 +46,15 @@ export const api = {
   unpublish: (postId: string) =>
     request<PostDetail>(`/posts/${postId}/unpublish`, { method: 'POST' }),
   deletePost: (postId: string) => request<void>(`/posts/${postId}`, { method: 'DELETE' }),
+  // Converts a file into a draft for the editor; nothing is saved until the author saves.
+  importPost: (file: File) =>
+    request<ImportedPost>('/posts/import', { method: 'POST', body: upload(file) }),
+  exportPost: (slug: string, format: ExportFormat) =>
+    download(`/exports/posts/${encodeURIComponent(slug)}`, { format }, `nebula-${slug}.${format}`),
+  exportAll: (format: ExportFormat) =>
+    download('/exports/posts', { format }, `nebula-posts.${format}`),
+  checkWriting: (text: string) =>
+    request<WritingCheck>('/writing/check', { method: 'POST', body: { text } }),
   tags: (limit = 12) => request<TagCount[]>('/tags', { query: { limit } }),
 
   like: (postId: string) => request<LikeStatus>(`/posts/${postId}/like`, { method: 'PUT' }),

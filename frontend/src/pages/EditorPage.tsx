@@ -1,16 +1,19 @@
-// Write and edit posts: Markdown with live preview, drafts, publishing and an unsaved-changes guard.
+// Write and edit posts: Markdown with live preview, drafts, publishing, file import and a writing check.
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { ArrowLeft, Eye, FileText, Globe, Save, Undo2 } from 'lucide-react'
+import { ArrowLeft, Eye, FileText, Globe, Info, Save, SpellCheck, Undo2, X } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { Link, useBeforeUnload, useBlocker, useNavigate, useParams } from 'react-router'
 
 import { api, keys } from '@/api/endpoints'
 import { ApiError, describeError } from '@/api/errors'
-import type { PostDetail } from '@/api/types'
+import type { ImportedPost, PostDetail, WritingIssue } from '@/api/types'
 import { useAuth } from '@/auth/context'
+import { ConfirmDialog } from '@/components/ConfirmDialog'
+import { ImportButton } from '@/components/ImportButton'
 import { Markdown } from '@/components/Markdown'
 import { ErrorState } from '@/components/States'
 import { TagInput } from '@/components/TagInput'
+import { WritingCheckPanel } from '@/components/WritingCheckPanel'
 import { Button } from '@/components/ui/button'
 import { buttonVariants } from '@/components/ui/button-variants'
 import { TextAreaField, TextField } from '@/components/ui/field'
@@ -51,41 +54,27 @@ function StatusBadge({ post }: { post: PostDetail | null }) {
 }
 
 function LeaveGuard({ blocker }: { blocker: ReturnType<typeof useBlocker> }) {
-  const stay = useRef<HTMLButtonElement>(null)
-  const open = blocker.state === 'blocked'
-  useEffect(() => {
-    if (!open) return
-    stay.current?.focus() // the safe choice gets focus
-    function onKey(event: KeyboardEvent) {
-      if (event.key === 'Escape') blocker.reset?.()
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [open, blocker])
-  if (!open) return null
   return (
-    <div className="fixed inset-0 z-50 grid place-items-center bg-void/70 p-4 backdrop-blur-sm">
-      <Card
-        role="alertdialog"
-        aria-modal="true"
-        aria-labelledby="leave-title"
-        className="w-full max-w-sm space-y-4 p-6 shadow-glow"
-      >
-        <h2 id="leave-title" className="font-display text-lg font-semibold">
-          Leave without saving?
-        </h2>
-        <p className="text-sm text-muted">Your unsaved changes to this post will be lost.</p>
-        <div className="flex justify-end gap-2">
-          <Button ref={stay} variant="ghost" onClick={() => blocker.reset?.()}>
-            Keep editing
-          </Button>
-          <Button variant="danger" onClick={() => blocker.proceed?.()}>
-            Discard changes
-          </Button>
-        </div>
-      </Card>
-    </div>
+    <ConfirmDialog
+      open={blocker.state === 'blocked'}
+      title="Leave without saving?"
+      confirmLabel="Discard changes"
+      cancelLabel="Keep editing"
+      onCancel={() => blocker.reset?.()}
+      onConfirm={() => blocker.proceed?.()}
+    >
+      Your unsaved changes to this post will be lost.
+    </ConfirmDialog>
   )
+}
+
+function importNotice(post: ImportedPost, filename: string): string {
+  const images = post.removed_images
+  const dropped =
+    images > 0
+      ? ` ${images} ${images === 1 ? 'image was' : 'images were'} left out: add them back as links if you need them.`
+      : ''
+  return `Imported “${filename}”. Review it, then save.${dropped}`
 }
 
 function Editor({ initial }: { initial: PostDetail | null }) {
@@ -97,6 +86,9 @@ function Editor({ initial }: { initial: PostDetail | null }) {
   const [formError, setFormError] = useState<string | null>(null)
   const [pending, setPending] = useState<Intent | null>(null)
   const [tab, setTab] = useState<'write' | 'preview'>('write')
+  const [notice, setNotice] = useState<string | null>(null)
+  const [checking, setChecking] = useState(false)
+  const contentRef = useRef<HTMLTextAreaElement>(null)
 
   const saved = post ? draftFrom(post) : EMPTY_DRAFT
   const dirty = isDirty(saved, draft)
@@ -117,6 +109,23 @@ function Editor({ initial }: { initial: PostDetail | null }) {
   function edit<K extends keyof Draft>(field: K, value: Draft[K]) {
     setDraft((current) => ({ ...current, [field]: value }))
     setErrors((current) => ({ ...current, [field]: undefined }))
+  }
+
+  function imported(result: ImportedPost, filename: string) {
+    setDraft((current) => ({ ...current, title: result.title, content: result.content }))
+    setErrors({})
+    setFormError(null)
+    setNotice(importNotice(result, filename))
+  }
+
+  function showIssue(issue: WritingIssue) {
+    setTab('write')
+    // Wait a frame so the textarea is visible (phones hide it on the preview tab).
+    requestAnimationFrame(() => {
+      const area = contentRef.current
+      area?.focus()
+      area?.setSelectionRange(issue.offset, issue.offset + issue.length)
+    })
   }
 
   async function submit(intent: Intent) {
@@ -234,6 +243,49 @@ function Editor({ initial }: { initial: PostDetail | null }) {
         </div>
       </div>
 
+      <div className="flex flex-wrap items-center gap-2">
+        <ImportButton
+          hasContent={Boolean(draft.title.trim() || draft.content.trim())}
+          onImported={imported}
+          onError={setNotice}
+          disabled={busy}
+        />
+        <Button
+          size="sm"
+          variant="ghost"
+          aria-pressed={checking}
+          onClick={() => setChecking((open) => !open)}
+        >
+          <SpellCheck /> Check writing
+        </Button>
+        {notice && (
+          <p
+            className="flex min-w-0 flex-1 items-start gap-2 rounded-xl bg-ink/[0.04] px-3 py-1.5 text-sm text-muted"
+            aria-live="polite"
+          >
+            <Info className="mt-0.5 size-4 shrink-0 text-nova" aria-hidden />
+            <span className="flex-1">{notice}</span>
+            <button
+              type="button"
+              onClick={() => setNotice(null)}
+              aria-label="Dismiss"
+              className="hover:text-ink"
+            >
+              <X className="size-4" aria-hidden />
+            </button>
+          </p>
+        )}
+      </div>
+
+      {checking && (
+        <WritingCheckPanel
+          text={draft.content}
+          onChange={(content) => edit('content', content)}
+          onShow={showIssue}
+          onClose={() => setChecking(false)}
+        />
+      )}
+
       {/* Phones: switch between writing and preview. Large screens: side by side. */}
       <div
         className="flex gap-1 rounded-xl p-1 glass lg:hidden"
@@ -265,6 +317,7 @@ function Editor({ initial }: { initial: PostDetail | null }) {
       <div className="grid gap-5 lg:grid-cols-2">
         <div className={cn(tab !== 'write' && 'hidden lg:block')}>
           <TextAreaField
+            ref={contentRef}
             label="Content"
             value={draft.content}
             maxLength={LIMITS.content}

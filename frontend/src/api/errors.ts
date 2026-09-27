@@ -12,6 +12,7 @@ type Problem = {
 export class ApiError extends Error {
   readonly status: number
   readonly title: string
+  readonly detail: string | null
   readonly fieldErrors: FieldError[]
   readonly retryAfter: number | null
 
@@ -20,6 +21,7 @@ export class ApiError extends Error {
     this.name = 'ApiError'
     this.status = status
     this.title = problem.title ?? 'Error'
+    this.detail = problem.detail ?? null
     this.fieldErrors = problem.errors ?? []
     this.retryAfter = retryAfter
   }
@@ -54,6 +56,8 @@ export function describeError(error: unknown): string {
     if (error.status === 429 && error.retryAfter) {
       return `Too many attempts. Try again in ${error.retryAfter} seconds.`
     }
+    // 503s from the API say which feature is unavailable ("PDF export isn't available...").
+    if (error.status === 503 && error.detail) return error.detail
     if (error.status >= 500) return 'Something went wrong on our side. Please try again.'
     return error.message
   }

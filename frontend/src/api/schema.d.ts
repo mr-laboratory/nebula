@@ -182,6 +182,46 @@ export interface paths {
         patch: operations["update_comment_api_v1_comments__comment_id__patch"];
         trace?: never;
     };
+    "/api/v1/exports/posts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Download all my posts (drafts included) as one document
+         * @description A cover page and contents list, then each post on a new page. Deleted posts are left out.
+         */
+        get: operations["export_my_posts_api_v1_exports_posts_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/exports/posts/{slug}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Download one of my posts
+         * @description Only the author can export a post; anyone else gets 404.
+         */
+        get: operations["export_my_post_api_v1_exports_posts__slug__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/health/live": {
         parameters: {
             query?: never;
@@ -237,6 +277,26 @@ export interface paths {
         put?: never;
         /** Create a draft */
         post: operations["create_post_api_v1_posts_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/posts/import": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Convert a file into a draft (nothing is saved)
+         * @description Returns a title and Markdown body for the editor. Images in .docx files are dropped.
+         */
+        post: operations["import_post_api_v1_posts_import_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -420,6 +480,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/writing/check": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Spelling, grammar and style suggestions for a draft
+         * @description The text goes to LanguageTool's public API and is not stored or logged by Nebula.
+         */
+        post: operations["check_writing_api_v1_writing_check_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -492,6 +572,14 @@ export interface components {
             /** Username */
             username: string;
         };
+        /** Body_import_post_api_v1_posts_import_post */
+        Body_import_post_api_v1_posts_import_post: {
+            /**
+             * File
+             * @description .md, .markdown, .txt or .docx, up to 1 MB
+             */
+            file: string;
+        };
         /** CommentCreate */
         CommentCreate: {
             /** Body */
@@ -528,6 +616,11 @@ export interface components {
             /** Body */
             body: string;
         };
+        /**
+         * ExportFormat
+         * @enum {string}
+         */
+        ExportFormat: "docx" | "pdf";
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
@@ -540,6 +633,21 @@ export interface components {
              * @constant
              */
             status: "ok";
+        };
+        /** ImportedPost */
+        ImportedPost: {
+            /**
+             * Content
+             * @description Markdown
+             */
+            content: string;
+            /**
+             * Removed Images
+             * @description Images in the file that were not imported
+             */
+            removed_images: number;
+            /** Title */
+            title: string;
         };
         /** LikeStatus */
         LikeStatus: {
@@ -854,6 +962,52 @@ export interface components {
             msg: string;
             /** Error Type */
             type: string;
+        };
+        /** WritingCheck */
+        WritingCheck: {
+            /** Issues */
+            issues: components["schemas"]["WritingIssue"][];
+            language: components["schemas"]["WritingLanguage"];
+        };
+        /** WritingCheckRequest */
+        WritingCheckRequest: {
+            /**
+             * Language
+             * @description `auto` to detect, or a code such as `en-US`
+             * @default auto
+             */
+            language: string;
+            /**
+             * Text
+             * @description Markdown
+             */
+            text: string;
+        };
+        /** WritingIssue */
+        WritingIssue: {
+            /**
+             * Category
+             * @enum {string}
+             */
+            category: "spelling" | "grammar" | "style" | "punctuation" | "other";
+            /** Length */
+            length: number;
+            /** Message */
+            message: string;
+            /**
+             * Offset
+             * @description Start, in UTF-16 code units (as in JavaScript)
+             */
+            offset: number;
+            /** Suggestions */
+            suggestions: string[];
+        };
+        /** WritingLanguage */
+        WritingLanguage: {
+            /** Code */
+            code: string;
+            /** Name */
+            name: string;
         };
     };
     responses: never;
@@ -1248,6 +1402,72 @@ export interface operations {
             };
         };
     };
+    export_my_posts_api_v1_exports_posts_get: {
+        parameters: {
+            query: {
+                format: components["schemas"]["ExportFormat"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/pdf": unknown;
+                    "application/vnd.openxmlformats-officedocument.wordprocessingml.document": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    export_my_post_api_v1_exports_posts__slug__get: {
+        parameters: {
+            query: {
+                format: components["schemas"]["ExportFormat"];
+            };
+            header?: never;
+            path: {
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/pdf": unknown;
+                    "application/vnd.openxmlformats-officedocument.wordprocessingml.document": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     live_api_v1_health_live_get: {
         parameters: {
             query?: never;
@@ -1354,6 +1574,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PostDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    import_post_api_v1_posts_import_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_import_post_api_v1_posts_import_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImportedPost"];
                 };
             };
             /** @description Validation Error */
@@ -1790,6 +2043,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["UserPublic"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    check_writing_api_v1_writing_check_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WritingCheckRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WritingCheck"];
                 };
             };
             /** @description Validation Error */
