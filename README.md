@@ -10,6 +10,7 @@ A production-grade, user-specific blog platform.
 - Sign up / sign in with secure, short-lived tokens
 - Authors create, edit, publish and delete **their own** posts (drafts stay private)
 - Likes and comments from other signed-in users
+- Roles: moderators remove content, admins manage accounts; every privileged action is audited
 - Markdown editor with live preview, tags and an unsaved-changes guard
 - Responsive UI with light, dark and system themes, and generated cover art
 
@@ -49,6 +50,7 @@ make web      # in a second terminal: app on http://localhost:5173
 | `make db-up` / `make db-down` | Start / stop Postgres and Redis |
 | `make migration m="…"` | Generate a migration from model changes |
 | `make seed-large` / `make explain` | Load 10k demo posts / print query plans and timings |
+| `make grant u=… role=…` / `make revoke …` | Give or take a role, e.g. `make grant u=alice role=admin` |
 | `make psql` | SQL shell on the local database |
 
 ## Project structure
@@ -65,7 +67,7 @@ backend/
 │   ├── repositories/      # database queries (filters, pagination, eager loading)
 │   └── api/               # dependencies and v1 HTTP endpoints
 ├── migrations/            # Alembic schema migrations
-├── scripts/               # developer scripts (seed data, query plans)
+├── scripts/               # developer scripts (seed data, query plans, roles)
 └── tests/
 frontend/
 ├── public/                # favicon, pre-paint theme script

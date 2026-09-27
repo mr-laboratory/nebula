@@ -27,7 +27,7 @@ flowchart TB
     R --> S --> RP --> M
     SC["<b>Schemas</b><br/>whitelisted in/out fields"] -.-> R
     C["<b>Core</b><br/>config · logging · errors · security"] -.-> R & S & RP
-    D["<b>Depends()</b><br/>settings · DB session · current user"] -.-> R
+    D["<b>Depends()</b><br/>settings · DB session · current user<br/>require_permission(code)"] -.-> R
 ```
 
 Dependencies point **downward only**.
@@ -174,6 +174,48 @@ flowchart LR
     W2 -->|no| Z
 ```
 
+### 4.6 Roles, moderation and audit
+
+Routes ask for a **permission**, never a role name. Roles are bundles of permissions stored in the database.
+
+```mermaid
+flowchart LR
+    subgraph Roles
+        U[user]
+        M[moderator]
+        A[admin]
+    end
+    M --> P1["post:delete:any"] & P2["comment:delete:any"]
+    A --> P3["user:manage"] & P4["audit:read"]
+    U --> P0["own content only<br/>(ownership checks)"]
+```
+
+```mermaid
+sequenceDiagram
+    participant A as Admin
+    participant G as require_permission("user:manage")
+    participant S as Admin service
+    participant DB as PostgreSQL
+    A->>G: PUT /admin/users/ada/roles/moderator
+    G->>DB: EXISTS (user_roles ⋈ role_permissions ⋈ permissions)
+    alt not granted
+        G-->>A: 403
+    end
+    G->>S: grant_role(actor, "ada", "moderator")
+    S->>DB: lock (SELECT … FOR UPDATE), re-check actor
+    S->>DB: INSERT user_roles + INSERT audit_logs
+    Note over S,DB: same transaction: both or neither
+    S-->>A: 200 account with roles
+```
+
+Lockout rules:
+- An admin can't remove their own admin role or deactivate themselves.
+- The last active admin can't be removed, not even from the CLI.
+
+Account changes take a row lock, so two admins demoting each other at the same moment can't both succeed: the second one re-checks its permission after the first commits, and fails.
+
+The first admin is created with `make grant u=… role=admin`. Running it needs database access, which is already the highest level of trust.
+
 ## 5. Frontend
 
 A single-page app. In development Vite serves it on :5173 and proxies `/api` to the API, so the browser sees a single origin: the refresh cookie works as-is and no CORS preflights are needed.
@@ -246,6 +288,7 @@ erDiagram
     USERS }o--o{ ROLES : "user_roles"
     ROLES }o--o{ PERMISSIONS : "role_permissions"
     USERS ||--o{ REFRESH_TOKENS : owns
+    USERS |o--o{ AUDIT_LOGS : "acts in"
 ```
 
 Full schema, constraints and design decisions: [database.md](database.md).
@@ -261,7 +304,7 @@ flowchart TB
         B2["CORS allow-list · security headers · rate-limited auth"]
     end
     subgraph App["Application"]
-        B3["Ownership & role checks · drafts → 404<br/>Whitelisted schemas · email private · generic login errors"]
+        B3["Ownership & permission checks · drafts → 404 · audit log<br/>Whitelisted schemas · email private · generic login errors"]
     end
     subgraph Data
         B4["Argon2id passwords · hashed refresh tokens<br/>Secrets from env · redacted logs"]
@@ -295,5 +338,5 @@ flowchart LR
 | Likes & comments | ✅ Done (v0.5.0) |
 | Frontend (feed, posts, auth, editor, dashboard, theming) | ✅ Done (v0.6.0) |
 | Indexes · query optimization · HTTP caching and compression | ✅ Done (v0.7.0) |
-| Roles (user / moderator) | Planned |
+| Roles (user / moderator / admin) · account management · audit log | ✅ Done (v0.8.0) |
 | Containers · CI · metrics | Planned |

@@ -71,6 +71,11 @@ The schema is exported to [`openapi.json`](openapi.json) and the web app generat
 | `PATCH` | `/comments/{id}` | Bearer (comment author) | `200` | Edit a comment |
 | `DELETE` | `/comments/{id}` | Bearer (comment author, post author or moderator) | `204` | Delete a comment |
 | `GET` | `/tags` | — | `200` | Tags in use, most popular first |
+| `GET` | `/admin/users` | Bearer (`user:manage`) | `200` | Accounts with email, status and roles |
+| `PUT` | `/admin/users/{username}/roles/{role}` | Bearer (`user:manage`) | `200` | Grant a role (idempotent) |
+| `DELETE` | `/admin/users/{username}/roles/{role}` | Bearer (`user:manage`) | `200` | Revoke a role (idempotent) |
+| `POST` | `/admin/users/{username}/deactivate` · `/activate` | Bearer (`user:manage`) | `200` | Block or restore an account |
+| `GET` | `/admin/audit-logs` | Bearer (`audit:read`) | `200` | Privileged actions, newest first |
 | `GET` | `/health/live` | — | `200` | Process is running |
 | `GET` | `/health/ready` | — | `200` / `503` | Database and Redis are reachable |
 
@@ -281,6 +286,86 @@ Public for published posts; a draft's comments are visible to its author only. A
 |---|---|---|---|---|
 | Edit | ✓ | `403` | `403` | `403` |
 | Delete | ✓ | ✓ | ✓ | `403` |
+
+## Admin
+
+### Roles and permissions
+
+Routes check **permissions**, never role names, so a role can change without touching code.
+
+| Permission | user | moderator | admin |
+|---|:-:|:-:|:-:|
+| Write, like, comment; manage own content | ✓ | ✓ | ✓ |
+| `post:delete:any` | | ✓ | |
+| `comment:delete:any` | | ✓ | |
+| `user:manage` | | | ✓ |
+| `audit:read` | | | ✓ |
+
+Every account keeps `user`. The roles don't overlap: admins manage people, moderators manage content. An admin can grant themselves `moderator`, which is itself audited.
+
+Without the permission: `401` if anonymous, `403` if signed in.
+
+**The first admin** is created from the command line; no API call can make someone admin without an existing admin:
+
+```bash
+make grant u=alice role=admin      # or: make revoke u=alice role=moderator
+```
+
+### `GET /admin/users`
+
+`?q=` matches username, display name or email (case-insensitive). Other filters: `?role=`, `?is_active=`, plus `limit` / `offset`. Newest accounts first.
+
+```json
+{
+  "items": [{
+    "id": "7b1c…", "username": "ada", "email": "ada@example.com", "display_name": "Ada",
+    "is_active": true, "roles": ["moderator", "user"], "created_at": "2026-09-27T08:00:00Z"
+  }],
+  "total": 1, "limit": 20, "offset": 0
+}
+```
+
+### Roles and account status
+
+`PUT` / `DELETE /admin/users/{username}/roles/{role}` and `POST /admin/users/{username}/deactivate` · `/activate` return the account in the shape above. Repeating a call changes nothing and adds no audit entry.
+
+Deactivating an account:
+- signs it out everywhere: every refresh token is revoked, and access tokens stop working on the next request;
+- blocks sign-in;
+- hides the public profile.
+
+Its content stays, and `/activate` reverses everything except the revoked sessions (the user signs in again).
+
+| Case | Result |
+|---|---|
+| Unknown user or role | `404` |
+| Revoke the `user` role | `409` |
+| Revoke your own `admin` role, or deactivate yourself | `409` |
+| Remove the last active admin (also refused from the CLI) | `409` |
+
+### `GET /admin/audit-logs`
+
+Filters: `?action=`, `?actor=<username>`, `?target_id=`, plus `limit` / `offset`.
+
+```json
+{
+  "items": [{
+    "id": 42, "actor": "mod", "action": "post.delete",
+    "target_type": "post", "target_id": "3f2c…", "details": {},
+    "created_at": "2026-09-27T09:12:00Z"
+  }],
+  "total": 1, "limit": 20, "offset": 0
+}
+```
+
+| Action | Recorded when |
+|---|---|
+| `post.delete` | A moderator deletes someone else's post |
+| `comment.delete` | A moderator deletes a comment that is neither theirs nor on their post (`details.post_id`) |
+| `role.grant` · `role.revoke` | A role actually changes (`details.role`) |
+| `user.deactivate` · `user.activate` | Account status actually changes |
+
+`actor` is `null` for command-line changes. Entries hold ids and role names only, never copied content. The database rejects `UPDATE` and `DELETE` on this table.
 
 ## Errors
 
