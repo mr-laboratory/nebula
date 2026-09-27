@@ -57,6 +57,31 @@ class RateLimitedError(AppError):
         self.headers = {"Retry-After": str(retry_after)}
 
 
+class PayloadTooLargeError(AppError):
+    status_code = HTTPStatus.REQUEST_ENTITY_TOO_LARGE
+    default_detail = "The request body is too large."
+
+
+class UnsupportedMediaTypeError(AppError):
+    status_code = HTTPStatus.UNSUPPORTED_MEDIA_TYPE
+    default_detail = "This file type is not supported."
+
+
+class UnprocessableError(AppError):
+    status_code = HTTPStatus.UNPROCESSABLE_CONTENT
+    default_detail = "The request could not be processed."
+
+
+class ServiceUnavailableError(AppError):
+    status_code = HTTPStatus.SERVICE_UNAVAILABLE
+    default_detail = "This service is temporarily unavailable. Please try again later."
+
+    def __init__(self, detail: str | None = None, retry_after: int | None = None) -> None:
+        super().__init__(detail)
+        if retry_after is not None:
+            self.headers = {"Retry-After": str(retry_after)}
+
+
 def problem_response(
     status: int,
     detail: str,

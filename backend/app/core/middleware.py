@@ -1,4 +1,4 @@
-"""ASGI middleware: request context, security headers, HTTP caching (ETag) and compression."""
+"""ASGI middleware: request context, body limits, security headers, HTTP caching and compression."""
 
 import hashlib
 import logging
@@ -7,6 +7,7 @@ import time
 import uuid
 
 from starlette.datastructures import Headers, MutableHeaders
+from starlette.exceptions import HTTPException
 from starlette.middleware.gzip import GZipMiddleware
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
@@ -82,6 +83,45 @@ class RequestContextMiddleware:
             )
             user_id_ctx.reset(user_token)
             request_id_ctx.reset(token)
+
+
+BODY_TOO_LARGE = "The request body is too large."
+
+
+class BodySizeLimitMiddleware:
+    """Refuses request bodies over `max_bytes` with 413, before or while they are read.
+
+    A declared Content-Length is checked up front. Bodies without one (chunked uploads) are
+    counted as they arrive, so a client can't bypass the limit by leaving the header out.
+    """
+
+    def __init__(self, app: ASGIApp, *, max_bytes: int) -> None:
+        self.app = app
+        self.max_bytes = max_bytes
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
+        declared = Headers(scope=scope).get("content-length", "")
+        if declared.isdigit() and int(declared) > self.max_bytes:
+            await problem_response(413, BODY_TOO_LARGE, scope["path"])(scope, receive, send)
+            return
+
+        received = 0
+
+        async def limited_receive() -> Message:
+            nonlocal received
+            message = await receive()
+            if message["type"] == "http.request":
+                received += len(message.get("body", b""))
+                if received > self.max_bytes:
+                    # Raised inside the app, so the normal error handlers render it.
+                    raise HTTPException(413, BODY_TOO_LARGE)
+            return message
+
+        await self.app(scope, limited_receive, send)
 
 
 class SecurityHeadersMiddleware:

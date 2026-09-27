@@ -126,6 +126,18 @@ async def list_by_author(
     return await _page(session, conditions, order_by, filters.limit, filters.offset, author_id)
 
 
+async def list_for_export(session: AsyncSession, author_id: uuid.UUID, limit: int) -> list[Post]:
+    """The author's posts with content and tags (no author: the caller is the author)."""
+    stmt = (
+        select(Post)
+        .options(selectinload(Post.tags))
+        .where(Post.author_id == author_id, Post.deleted_at.is_(None))
+        .order_by(Post.created_at.asc(), Post.id.asc())
+        .limit(limit)
+    )
+    return list((await session.scalars(stmt)).all())
+
+
 async def get_by_slug(session: AsyncSession, slug: str) -> Post | None:
     """A non-deleted post with author and tags, any status (the caller decides visibility)."""
     stmt = _with_relations(select(Post)).where(Post.slug == slug, Post.deleted_at.is_(None))

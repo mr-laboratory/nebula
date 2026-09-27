@@ -3,15 +3,17 @@
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, Path, Query, Response, status
+from fastapi import APIRouter, File, Path, Query, Response, UploadFile, status
 
 from app.api.deps import CurrentUser, OptionalUser, RedisDep, SessionDep, SettingsDep
+from app.core.errors import PayloadTooLargeError
 from app.core.rate_limit import enforce
 from app.models import PostStatus
 from app.schemas.common import Page
+from app.schemas.imports import ImportedPost
 from app.schemas.like import LikeStatus
 from app.schemas.post import PostCreate, PostDetail, PostFilters, PostSummary, PostUpdate
-from app.services import likes, posts
+from app.services import imports, likes, posts
 
 router = APIRouter(prefix="/posts", tags=["posts"])
 
@@ -43,6 +45,29 @@ async def create_post(
     post = await posts.create(session, user, body)
     response.headers["Location"] = f"{settings.api_prefix}/posts/{post.slug}"
     return post
+
+
+IMPORT_LIMIT = {"limit": 20, "window": 3600}
+READ_CHUNK = 64 * 1024
+
+
+@router.post("/import", summary="Convert a file into a draft (nothing is saved)")
+async def import_post(
+    file: Annotated[UploadFile, File(description=".md, .markdown, .txt or .docx, up to 1 MB")],
+    user: CurrentUser,
+    redis: RedisDep,
+) -> ImportedPost:
+    """Returns a title and Markdown body for the editor. Images in .docx files are dropped."""
+    await enforce(redis, "import:user", str(user.id), **IMPORT_LIMIT)
+    data = bytearray()
+    while chunk := await file.read(READ_CHUNK):
+        data += chunk
+        if len(data) > imports.MAX_FILE_BYTES:
+            raise PayloadTooLargeError("Files can be up to 1 MB.")
+    draft = await imports.convert(file.filename or "", bytes(data))
+    return ImportedPost(
+        title=draft.title, content=draft.content, removed_images=draft.removed_images
+    )
 
 
 @router.patch("/{post_id}", summary="Edit my post")
