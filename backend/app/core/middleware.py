@@ -10,8 +10,9 @@ from starlette.datastructures import Headers, MutableHeaders
 from starlette.middleware.gzip import GZipMiddleware
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
+from app.core import metrics
 from app.core.errors import problem_response
-from app.core.logging import request_id_ctx
+from app.core.logging import request_id_ctx, user_id_ctx
 
 logger = logging.getLogger("nebula.access")
 
@@ -24,7 +25,7 @@ API_CSP = "default-src 'none'; frame-ancestors 'none'"
 
 
 class RequestContextMiddleware:
-    """Assigns a request id, logs one line per request, and turns crashes into safe 500s."""
+    """Assigns a request id, logs and measures each request, and turns crashes into safe 500s."""
 
     def __init__(self, app: ASGIApp) -> None:
         self.app = app
@@ -37,6 +38,7 @@ class RequestContextMiddleware:
         incoming = dict(scope["headers"]).get(REQUEST_ID_HEADER.lower().encode(), b"").decode()
         request_id = incoming if _VALID_REQUEST_ID.match(incoming) else uuid.uuid4().hex
         token = request_id_ctx.set(request_id)
+        user_token = user_id_ctx.set(None)  # filled in by the auth dependency
         started = time.perf_counter()
         status = 500
         response_started = False
@@ -52,7 +54,11 @@ class RequestContextMiddleware:
         try:
             await self.app(scope, receive, send_wrapper)
         except Exception:
-            logger.exception("unhandled error")
+            # Full traceback plus where it happened; never the request body or headers.
+            logger.exception(
+                "unhandled error",
+                extra={"method": scope["method"], "route": metrics.route_label(scope)},
+            )
             if not response_started:
                 response = problem_response(
                     500,
@@ -62,15 +68,19 @@ class RequestContextMiddleware:
                 )
                 await response(scope, receive, send)
         finally:
+            elapsed = time.perf_counter() - started
+            metrics.observe(scope, status, elapsed)
             logger.info(
                 "request",
                 extra={
                     "method": scope["method"],
                     "path": scope["path"],
+                    "route": metrics.route_label(scope),
                     "status": status,
-                    "duration_ms": round((time.perf_counter() - started) * 1000, 2),
+                    "duration_ms": round(elapsed * 1000, 2),
                 },
             )
+            user_id_ctx.reset(user_token)
             request_id_ctx.reset(token)
 
 

@@ -3,7 +3,7 @@
 BACKEND := cd backend &&
 FRONTEND := cd frontend &&
 
-.PHONY: help setup env dev web test lint fmt typecheck check web-check api-types db-up db-down migrate migration seed seed-large explain grant revoke psql
+.PHONY: help setup env dev web up down logs smoke test lint fmt typecheck check web-check api-types db-up db-down migrate migration seed seed-large explain grant revoke psql backup restore
 
 help: ## Show available commands
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  \033[36m%-10s\033[0m %s\n", $$1, $$2}'
@@ -21,6 +21,20 @@ dev: ## Run the API with auto-reload on :8000
 
 web: ## Run the web app with hot reload on :5173 (proxies /api to :8000)
 	$(FRONTEND) npm run dev
+
+up: env ## Build and run the whole app in Docker on http://localhost:8080
+	@if command -v colima >/dev/null; then colima status >/dev/null 2>&1 || colima start; fi
+	docker compose --profile app up -d --build --wait
+	@echo "✓ Nebula is running on http://localhost:$${WEB_PORT:-8080}"
+
+down: ## Stop every container (data is kept)
+	docker compose --profile app down
+
+smoke: ## Check the running Docker stack end to end
+	@scripts/smoke-test.sh
+
+logs: ## Follow the API and web logs (Ctrl-C to stop)
+	docker compose --profile app logs -f api web
 
 test: ## Run tests
 	$(BACKEND) uv run pytest
@@ -47,8 +61,8 @@ db-up: ## Start Postgres + Redis (starts Colima first if installed)
 	@if command -v colima >/dev/null; then colima status >/dev/null 2>&1 || colima start; fi
 	docker compose up -d --wait
 
-db-down: ## Stop Postgres + Redis (data is kept)
-	docker compose down
+db-down: ## Stop Postgres + Redis, and the app if it's running (data is kept)
+	docker compose --profile app down
 
 migrate: ## Apply all pending migrations
 	$(BACKEND) uv run alembic upgrade head
@@ -76,3 +90,9 @@ revoke: ## Take a role away: make revoke u=alice role=moderator
 
 psql: ## Open a psql shell on the local DB
 	docker compose exec db sh -c 'psql -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"'
+
+backup: ## Dump the local DB to backups/ (git-ignored)
+	@scripts/backup.sh
+
+restore: ## Replace the local DB with a dump: make restore f=backups/<file>.dump
+	@scripts/restore.sh "$(f)"

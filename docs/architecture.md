@@ -16,6 +16,8 @@ flowchart LR
 
 The API is **stateless**: session state lives in PostgreSQL and Redis, so instances can scale horizontally.
 
+The ports above are for local development. In Docker, nginx serves the app and forwards `/api` on a single port (see [§9](#9-deployment-docker)).
+
 ## 2. Backend layers
 
 ```mermaid
@@ -36,7 +38,7 @@ Dependencies point **downward only**.
 
 ```mermaid
 flowchart LR
-    C([Client]) --> SH["① Security headers<br/>CSP, nosniff, frame-deny"] --> ID["② Request ID + access log<br/>X-Request-ID, JSON, redacted"] --> GZ["③ Gzip<br/>over 1 KB, not /auth"] --> CORS["④ CORS<br/>frontend origin only"] --> ET["⑤ ETag<br/>anonymous public GETs → 304"] --> RT["Route → Service → Repository"] --> DB[(PostgreSQL)]
+    C([Client]) --> SH["① Security headers<br/>CSP, nosniff, frame-deny"] --> ID["② Request ID, access log, metrics<br/>X-Request-ID, JSON, redacted"] --> GZ["③ Gzip<br/>over 1 KB, not /auth"] --> CORS["④ CORS<br/>frontend origin only"] --> ET["⑤ ETag<br/>anonymous public GETs → 304"] --> RT["Route → Service → Repository"] --> DB[(PostgreSQL)]
     RT -->|success| OK["200/201/204<br/>response schema"]
     RT -->|domain error| PD["4xx Problem Details<br/>RFC 9457"]
     RT -->|unexpected| E5["500 generic message<br/>+ request_id only"]
@@ -312,22 +314,84 @@ flowchart TB
     subgraph Repo["Repository & CI"]
         B5["gitleaks · push protection · Dependabot · CodeQL · noreply commits"]
     end
+    subgraph Runtime["Containers"]
+        B6["Non-root · read-only filesystem · no Linux capabilities<br/>Only the web port published, on 127.0.0.1"]
+    end
     Browser --> Edge --> App --> Data
     Repo -.-> App
+    Runtime -.-> Edge
 ```
 
 ## 8. Observability
 
 ```mermaid
 flowchart LR
-    RQ[Request] --> LG["JSON log line<br/>request_id · path · status · ms"]
+    RQ[Request] --> LG["<b>Logs</b> · one JSON line each<br/>request_id · user_id · route · status · ms"]
+    RQ --> MX["<b>Metrics</b> · counters + histograms<br/>per method · route template · status"]
     RQ --> HD["X-Request-ID<br/>returned to client"]
-    OPS([Ops / Docker]) --> LV["/health/live<br/>process up"]
+    ERR[Unhandled error] --> LG2["error log: traceback,<br/>request_id, user_id, route<br/>no body, no headers"]
+    ERR --> E5["client gets a generic 500<br/>+ the same request_id"]
+    OPS([Docker / monitoring]) --> LV["/health/live<br/>process up"]
     OPS --> RY["/health/ready<br/>DB + Redis reachable"]
-    OPS --> MT["/metrics<br/>Prometheus"]
+    OPS --> MT["/metrics<br/>Prometheus text format"]
 ```
 
-## 9. Implementation status
+| Signal | Answers | Where |
+|---|---|---|
+| **Logs** | What happened to *this* request? | stdout (`make logs`). Every line has the request id; signed-in requests add the user's id, never a name or email |
+| **Metrics** | How many, how fast, how many failed, over time? | `GET /metrics`: `nebula_http_requests_total`, `nebula_http_request_duration_seconds`, plus process metrics |
+| **Health** | Should this container get traffic, or be restarted? | `/health/live` (process up), `/health/ready` (dependencies up) |
+
+**Metric labels are bounded.** Routes are recorded as templates (`/api/v1/posts/{slug}`). Unknown paths share one `unmatched` series and unknown methods share `OTHER`. Each label combination is a time series held in memory, so letting clients pick label values would let them exhaust it.
+
+**`/metrics` is internal.** It sits outside `/api`, so nginx never forwards it. Only containers on the Compose network can scrape it. To turn it off, set `METRICS_ENABLED=false`.
+
+Traces (spans across services) aren't needed with a single API. The request id plays that role in the logs.
+
+## 9. Deployment (Docker)
+
+```mermaid
+flowchart LR
+    B([Browser]) -->|"127.0.0.1:8080"| W
+    subgraph net["Compose network (internal DNS: db, redis, api)"]
+        W["<b>web</b> · nginx, non-root<br/>static app + security headers<br/>/api → api:8000"]
+        A["<b>api</b> · uvicorn, non-root<br/>not published"]
+        M["<b>migrate</b> · one-shot<br/>alembic upgrade head"]
+        D[("<b>db</b><br/>PostgreSQL")]
+        R[("<b>redis</b>")]
+        W --> A --> D & R
+        M --> D
+    end
+```
+
+Start-up order comes from health checks, not timing:
+
+```mermaid
+flowchart LR
+    D["db healthy"] --> M["migrate exits 0"] --> A["api ready<br/>(DB + Redis reachable)"] --> W["web healthy"]
+    R["redis healthy"] --> A
+```
+
+| Image | Build stage | Runtime stage |
+|---|---|---|
+| `backend/Dockerfile` | uv installs the locked, production-only dependencies | `python:3.13-slim` + the virtualenv + app code. No uv, tests or dev tools. Runs as uid 10001 |
+| `frontend/Dockerfile` | Node 24 runs `npm ci` and the Vite build | Unprivileged nginx + the built files. No Node, no source |
+
+**Hardening** (`docker-compose.yml`):
+- Every app container has a read-only filesystem, drops all Linux capabilities and sets `no-new-privileges`.
+- Only the web port is published, and only on `127.0.0.1`.
+
+**Proxy and client IPs:** nginx *overwrites* `X-Forwarded-For` with the real client address. The API trusts that header for its rate limits, which is safe only because the API port is unreachable except through nginx.
+
+**Liveness vs readiness:** the image's own `HEALTHCHECK` checks liveness. Compose overrides it with readiness, because `depends_on` should wait until the API can serve, not just run.
+
+**Configuration:** images contain no configuration or secrets. `.env` supplies secrets at run time, and Compose sets the in-network hostnames and `APP_ENV=production`, which disables `/docs` and rejects placeholder secrets.
+
+**CI:** on every pull request, the Docker job builds both images, starts the stack with `--wait`, and runs `scripts/smoke-test.sh`. That script checks the app shell, the API through the proxy, the security headers, that `/metrics` is internal only, and that no container runs as root.
+
+**Backups:** `make backup` writes a `pg_dump` custom-format file to the git-ignored `backups/` folder, readable only by you. `make restore f=…` asks for confirmation, then restores it in one transaction. See [database.md](database.md#backups).
+
+## 10. Implementation status
 
 | Area | Status |
 |---|---|
@@ -339,4 +403,4 @@ flowchart LR
 | Frontend (feed, posts, auth, editor, dashboard, theming) | ✅ Done (v0.6.0) |
 | Indexes · query optimization · HTTP caching and compression | ✅ Done (v0.7.0) |
 | Roles (user / moderator / admin) · account management · audit log | ✅ Done (v0.8.0) |
-| Containers · CI · metrics | Planned |
+| Docker full stack · metrics · backups | ✅ Done (v0.9.0) |
