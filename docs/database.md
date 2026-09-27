@@ -206,5 +206,26 @@ Deep offsets still cost more than page 1: PostgreSQL has to walk past every skip
 | `make explain` | `EXPLAIN ANALYZE` timings and scan types for the hot queries |
 | `make grant u=… role=…` / `make revoke …` | Give or take a role, e.g. create the first admin (audited, actor `null`) |
 | `make psql` | SQL shell on the local database |
+| `make backup` / `make restore f=…` | Dump the database to `backups/`, or replace it with a dump ([Backups](#backups)) |
+
+`make dev` and the full Docker stack (`make up`) use the same Postgres container and volume. Under Docker, a one-shot `migrate` container applies migrations before the API starts, so `make migrate` is only needed for local development.
 
 Tests run against a separate `<POSTGRES_DB>_test` database. The suite migrates it once, runs each test inside a transaction that is rolled back, and verifies that models and migrations have not drifted apart (`alembic check`).
+
+## Backups
+
+```mermaid
+flowchart LR
+    DB[("Postgres<br/>container")] -->|"make backup<br/>pg_dump --format=custom"| F["backups/nebula-&lt;UTC&gt;.dump<br/>mode 600 · git-ignored"]
+    F -->|"make restore f=…<br/>pg_restore --single-transaction"| DB
+```
+
+| Property | How |
+|---|---|
+| Format | `pg_dump` custom format: compressed, and `pg_restore` can restore it selectively |
+| Consistency | `pg_dump` reads one snapshot, so the dump is consistent while the app keeps running |
+| No half-written files | The dump is written to `.partial` and renamed only when complete |
+| Private | Dumps contain emails and password hashes: files are created with `umask 077` and `backups/` is git-ignored |
+| Safe restore | Asks you to type `restore`; runs `--clean --if-exists` in a single transaction, so a failed restore leaves the database unchanged |
+
+These are local, on-demand backups. A hosted deployment would add scheduled dumps copied off the machine (or point-in-time recovery from WAL archiving) and a periodic test restore, since a backup that has never been restored isn't known to work.

@@ -79,6 +79,8 @@ The schema is exported to [`openapi.json`](openapi.json) and the web app generat
 | `GET` | `/health/live` | — | `200` | Process is running |
 | `GET` | `/health/ready` | — | `200` / `503` | Database and Redis are reachable |
 
+**Operations endpoint.** `GET /metrics` (outside `/api/v1`, not in the OpenAPI schema) serves Prometheus metrics: request counts and latency by method, route template and status. It's for scrapers inside the deployment. The web proxy forwards only `/api/`, so `/metrics` isn't reachable from a browser in the Docker stack. Set `METRICS_ENABLED=false` to turn it off.
+
 ### `POST /auth/register`
 
 ```json
