@@ -10,8 +10,6 @@ flowchart LR
     FE -->|"REST /api/v1<br/>Bearer token + refresh cookie"| API["<b>FastAPI</b> · :8000<br/>business rules, auth,<br/>single source of truth"]
     API --> PG[("<b>PostgreSQL</b><br/>users, posts, comments,<br/>likes, roles, tokens")]
     API --> RD[("<b>Redis</b><br/>rate limits, cache")]
-    API --> FS[/"<b>Local storage</b><br/>cover images"/]
-    API -.->|optional| UN["<b>Unsplash</b><br/>→ Picsum fallback"]
     API -.->|optional| LT["<b>LanguageTool</b><br/>writing check"]
 ```
 
@@ -247,6 +245,7 @@ sequenceDiagram
 - **Export** builds one neutral document model from the posts, then renders it with `python-docx` (Word) or WeasyPrint (PDF). Images are never fetched, so an export can't be used to make the server call out.
 - **Writing check** is a thin proxy to the public LanguageTool API. Limits on both the user and the whole server keep Nebula inside the free tier, and `WRITING_CHECK_ENABLED=false` removes the route.
 
+## 5. Frontend
 
 A single-page app. In development Vite serves it on :5173 and proxies `/api` to the API, so the browser sees a single origin: the refresh cookie works as-is and no CORS preflights are needed.
 
@@ -435,3 +434,4 @@ flowchart LR
 | Roles (user / moderator / admin) · account management · audit log | ✅ Done (v0.8.0) |
 | Docker full stack · metrics · backups | ✅ Done (v0.9.0) |
 | Import (.md, .txt, .docx) · export (Word, PDF) · writing check | ✅ Done (v0.10.0) |
+| User guide · architecture decisions · README | ✅ Done (v1.0.0) |
