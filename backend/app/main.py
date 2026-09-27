@@ -11,6 +11,7 @@ from app.api.v1.router import api_router
 from app.core.config import Settings, get_settings
 from app.core.errors import register_exception_handlers
 from app.core.logging import configure_logging
+from app.core.metrics import METRICS_PATH, metrics_endpoint
 from app.core.middleware import (
     CompressionMiddleware,
     HTTPCacheMiddleware,
@@ -35,7 +36,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     docs_enabled = not settings.is_production
     app = FastAPI(
         title=settings.app_name,
-        version="0.8.0",
+        version="0.9.0",
         debug=settings.app_debug,
         docs_url="/docs" if docs_enabled else None,
         redoc_url="/redoc" if docs_enabled else None,
@@ -69,4 +70,6 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     register_exception_handlers(app)
     app.include_router(api_router, prefix=settings.api_prefix)
+    if settings.metrics_enabled:
+        app.add_route(METRICS_PATH, metrics_endpoint, include_in_schema=False)
     return app

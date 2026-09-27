@@ -25,6 +25,8 @@ class Settings(BaseSettings):
     api_prefix: str = "/api/v1"
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = "INFO"
     cors_origins: Annotated[list[str], NoDecode] = ["http://localhost:5173"]
+    # Served outside the API prefix; in Docker only other containers can reach it.
+    metrics_enabled: bool = True
 
     jwt_secret: SecretStr = Field(min_length=32)
     access_token_expire_minutes: int = Field(default=15, ge=1, le=60)

@@ -9,6 +9,7 @@ from redis.asyncio import Redis
 
 from app.core.config import Settings
 from app.core.errors import ForbiddenError, UnauthorizedError
+from app.core.logging import user_id_ctx
 from app.core.security import decode_access_token
 from app.db.session import AsyncSession, Database
 from app.models import User
@@ -54,6 +55,7 @@ async def get_optional_user(
     user = await session.get(User, decode_access_token(credentials.credentials, settings))
     if user is None or not user.is_active:
         raise UnauthorizedError("The access token is invalid or has expired.")
+    user_id_ctx.set(str(user.id))  # later log lines for this request carry it
     return user
 
 

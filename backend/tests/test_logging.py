@@ -3,7 +3,14 @@
 import json
 import logging
 
-from app.core.logging import REDACTED, JsonFormatter, redact, request_id_ctx
+from app.core.logging import (
+    REDACTED,
+    JsonFormatter,
+    configure_logging,
+    redact,
+    request_id_ctx,
+    user_id_ctx,
+)
 
 
 def test_redact_masks_sensitive_keys_recursively() -> None:
@@ -36,3 +43,15 @@ def test_json_formatter_includes_request_id_and_redacts_extras() -> None:
     assert line["request_id"] == "req-123"
     assert line["password"] == REDACTED
     assert line["user"] == "nova"
+
+
+def test_context_is_captured_when_the_record_is_created() -> None:
+    configure_logging()
+    token = user_id_ctx.set("u-1")
+    try:
+        record = logging.getLogger("t").makeRecord("t", logging.INFO, "f", 1, "hi", (), None)
+    finally:
+        user_id_ctx.reset(token)
+
+    # Formatted later (buffered or queued handlers), it still names the user.
+    assert json.loads(JsonFormatter().format(record))["user_id"] == "u-1"
