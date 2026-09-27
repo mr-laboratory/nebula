@@ -1,6 +1,7 @@
 """'Check my writing': Markdown masking, LanguageTool responses, failures and limits."""
 
 import json
+import time
 from collections.abc import Callable
 from typing import Any
 from urllib.parse import parse_qs
@@ -12,7 +13,7 @@ from httpx import AsyncClient
 
 from app.core.config import Settings
 from app.main import create_app
-from app.services.writing import annotate
+from app.services.writing import _Segment, annotate
 from tests.conftest import signed_in
 
 CHECK = "/api/v1/writing/check"
@@ -68,6 +69,22 @@ def test_markdown_syntax_is_markup_and_prose_is_text() -> None:
     assert "Title" in prose and "the docs" in prose
     assert "##" not in prose and "https://x.io" not in prose
     assert "code" not in prose and "not prose" not in prose
+
+
+def test_table_rules_are_markup() -> None:
+    for rule in ("| --- | :---: |", "---|---", "  |:----|  "):
+        assert annotate(rule) == [_Segment(rule, markup=True)]
+    assert annotate("-- not a rule")[0].markup is False
+
+
+def test_hostile_markdown_is_split_in_linear_time() -> None:
+    hostile = ["](" * 10_000, "<" * 20_000, " " * 20_000 + "x", "|" + " " * 20_000 + "-"]
+
+    started = time.perf_counter()
+    for text in hostile:
+        annotate(text)
+
+    assert time.perf_counter() - started < 1  # the old patterns took seconds on these
 
 
 # ─── Checking ─────────────────────────────────────────────

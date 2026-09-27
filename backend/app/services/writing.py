@@ -49,12 +49,13 @@ CATEGORIES = {
 _BLOCK_MARKERS = re.compile(
     r"^(?:\s{0,3}(?:#{1,6}\s+|>\s?|[-*+]\s+(?:\[[ xX]\]\s+)?|\d{1,9}[.)]\s+))+"
 )
-_TABLE_RULE = re.compile(r"^\s*\|?\s*:?-{3,}:?\s*(?:\|\s*:?-{3,}:?\s*)*\|?\s*$")
+_TABLE_CELL_RULE = re.compile(r":?-{3,}:?")
 _INLINE_MARKUP = re.compile(
     r"`+[^`\n]*`+"  # inline code
     r"|!?\["  # link or image opening
-    r"|\](?:\([^)\s]*(?:\s+\"[^\"\n]*\")?\))?"  # link closing and target
-    r"|<[^>\n]+>"  # autolinks and HTML
+    # Link targets and tags stop at the next opener, so "](](](…" or "<<<…" stays linear.
+    r"|\](?:\([^()\[\]\s]*(?:\s+\"[^\"\n]*\")?\))?"  # link closing and target
+    r"|<[^<>\n]+>"  # autolinks and HTML
     r"|\*\*|__|~~|\*|(?<!\w)_|_(?!\w)"  # emphasis
     r"|\|"  # table cells
 )
@@ -65,6 +66,15 @@ class _Segment:
     text: str
     markup: bool
     interpret_as: str | None = None
+
+
+def _is_table_rule(line: str) -> bool:
+    """A table's header rule, such as `| --- | :---: |`. Plain string work, no backtracking."""
+    stripped = line.strip()
+    if "-" not in stripped:
+        return False
+    cells = stripped.removeprefix("|").removesuffix("|").split("|")
+    return all(_TABLE_CELL_RULE.fullmatch(cell.strip()) for cell in cells)
 
 
 def utf16_len(text: str) -> int:
@@ -82,7 +92,7 @@ def annotate(markdown: str) -> list[_Segment]:
     for number, line in enumerate(markdown.split("\n")):
         if number:
             segments.append(_Segment("\n", markup=False))
-        if number in code_lines or _TABLE_RULE.match(line):
+        if number in code_lines or _is_table_rule(line):
             segments.append(_Segment(line, markup=True))
             continue
         marker = _BLOCK_MARKERS.match(line)
