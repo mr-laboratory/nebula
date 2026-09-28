@@ -33,7 +33,7 @@ flowchart LR
 - **Server-side sessions only** (session id cookie, lookup on every request): simple and revocable, but every authenticated request hits the store, and it couples the API to cookie-based CSRF defences on every route.
 - **Long-lived JWT in `localStorage`**: stateless, but readable by any script that gets onto the page (XSS), and impossible to revoke before it expires.
 - **Refresh token in `localStorage`**: same XSS exposure, for a much longer-lived credential.
-- **OAuth / third-party sign-in only**: removes password handling, but adds an external dependency for the core flow. Kept on the roadmap as an extra option.
+- **OAuth / third-party sign-in only**: removes password handling, but adds an external dependency for the core flow. Listed in the README under upcoming releases, as an extra option.
 
 ## Consequences
 
