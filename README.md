@@ -194,7 +194,7 @@ A versioned REST API under `/api/v1`, with JSON errors in the Problem Details fo
 | [API reference](docs/api.md) | Endpoints, payloads, errors and rate limits |
 | [Database](docs/database.md) | Schema, constraints, indexes and query plans, backups |
 | [Architecture decisions](docs/adr/) | Why each major choice was made, and what it costs |
-| [Learning log](docs/learning-log/) | Concepts and lessons, phase by phase |
+| [Learning log](docs/learning-log/) | Concepts and lessons, day by day (Phases 0–11 over five days) |
 
 ## Project structure
 
