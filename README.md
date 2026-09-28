@@ -23,7 +23,7 @@ A production-grade, user-specific blog platform. Anyone can read. Signed-in auth
 
 ## Contents
 
-[Features](#features) · [Production-grade by design](#production-grade-by-design) · [Architecture](#architecture) · [Quickstart](#quickstart) · [Configuration](#configuration) · [Testing](#testing) · [API](#api) · [Project structure](#project-structure) · [Roadmap](#roadmap)
+[Features](#features) · [Production-grade by design](#production-grade-by-design) · [Architecture](#architecture) · [Quickstart](#quickstart) · [Configuration](#configuration) · [Testing](#testing) · [API](#api) · [Project structure](#project-structure) · [Upcoming releases](#upcoming-releases)
 
 ## Features
 
@@ -232,7 +232,9 @@ scripts/                   # .env setup, backup / restore, smoke test
 docker-compose.yml         # PostgreSQL + Redis; with the `app` profile, the full stack
 ```
 
-## Roadmap
+## Upcoming releases
+
+Out of scope for 1.0 and planned for later releases:
 
 - Highlight writing suggestions directly in the editor text, as you type
 - A web page for admins: accounts, roles and the audit log (available through the API today)
