@@ -4,7 +4,7 @@
 
 ARG PYTHON_VERSION=3.13
 
-FROM ghcr.io/astral-sh/uv:0.12.19 AS uv
+FROM ghcr.io/astral-sh/uv:0.12.22 AS uv
 
 # ─── Build: resolve and install locked, production-only dependencies ─────────────
 FROM python:${PYTHON_VERSION}-slim AS build
